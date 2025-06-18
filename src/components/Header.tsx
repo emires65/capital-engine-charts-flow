@@ -2,6 +2,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '../contexts/AuthContext';
+import MobileNavigation from './MobileNavigation';
 
 const Header = () => {
   const { user, logout } = useAuth();
@@ -20,6 +21,7 @@ const Header = () => {
             CapitalEngine
           </Link>
           
+          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
             <Link to="/" className="text-slate-300 hover:text-white transition-colors">
               Home
@@ -51,6 +53,25 @@ const Header = () => {
               </div>
             )}
           </nav>
+
+          {/* Mobile Navigation */}
+          <div className="flex items-center space-x-4">
+            {!user && (
+              <div className="md:hidden flex items-center space-x-2">
+                <Link to="/login">
+                  <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white">
+                    Login
+                  </Button>
+                </Link>
+                <Link to="/register">
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
+                    Register
+                  </Button>
+                </Link>
+              </div>
+            )}
+            <MobileNavigation />
+          </div>
         </div>
       </div>
     </header>
