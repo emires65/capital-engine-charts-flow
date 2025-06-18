@@ -5,15 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '../hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import AdminLogin from '../components/AdminLogin';
 
 interface User {
   id: string;
   email: string;
   name: string;
   balance: number;
+  registrationDate: string;
 }
 
 const Admin = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [balanceAmount, setBalanceAmount] = useState('');
@@ -21,21 +24,35 @@ const Admin = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Load users from localStorage (in a real app, this would be from an API)
-    const savedUsers = localStorage.getItem('capitalengine_admin_users');
-    if (savedUsers) {
-      setUsers(JSON.parse(savedUsers));
-    } else {
-      // Initialize with some demo users
-      const demoUsers: User[] = [
-        { id: '1', email: 'user1@example.com', name: 'John Doe', balance: 1500.00 },
-        { id: '2', email: 'user2@example.com', name: 'Jane Smith', balance: 2750.50 },
-        { id: '3', email: 'user3@example.com', name: 'Mike Johnson', balance: 890.25 },
-      ];
-      setUsers(demoUsers);
-      localStorage.setItem('capitalengine_admin_users', JSON.stringify(demoUsers));
+    if (isAuthenticated) {
+      loadUsers();
     }
-  }, []);
+  }, [isAuthenticated]);
+
+  const loadUsers = () => {
+    // Load registered users from localStorage
+    const registeredUsers = localStorage.getItem('capitalengine_registered_users');
+    const adminUsers = localStorage.getItem('capitalengine_admin_users');
+    
+    let allUsers: User[] = [];
+    
+    if (registeredUsers) {
+      const regUsers = JSON.parse(registeredUsers);
+      allUsers = regUsers.map((user: any) => ({
+        ...user,
+        balance: user.balance || 0,
+        registrationDate: user.registrationDate || new Date().toISOString()
+      }));
+    }
+    
+    // Merge with existing admin users if any
+    if (adminUsers && !registeredUsers) {
+      allUsers = JSON.parse(adminUsers);
+    }
+    
+    setUsers(allUsers);
+    localStorage.setItem('capitalengine_admin_users', JSON.stringify(allUsers));
+  };
 
   const updateUserBalance = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,9 +88,8 @@ const Admin = () => {
       setUsers(updatedUsers);
       localStorage.setItem('capitalengine_admin_users', JSON.stringify(updatedUsers));
 
-      // Also update the user's balance in their local storage
-      const userKey = `capitalengine_balance_${selectedUser}`;
-      localStorage.setItem(userKey, amount.toString());
+      // Update the user's balance in the transaction context
+      localStorage.setItem('capitalengine_balance', amount.toString());
 
       toast({
         title: "Success",
@@ -102,16 +118,29 @@ const Admin = () => {
     }).format(amount);
   };
 
+  if (!isAuthenticated) {
+    return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 p-8">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            CapitalEngine Admin Panel
-          </h1>
-          <p className="text-slate-400">
-            Manage user accounts and balances
-          </p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">
+              CapitalEngine Admin Panel
+            </h1>
+            <p className="text-slate-400">
+              Manage user accounts and balances
+            </p>
+          </div>
+          <Button 
+            onClick={() => setIsAuthenticated(false)}
+            variant="outline"
+            className="border-slate-600 text-slate-300 hover:bg-slate-700"
+          >
+            Logout
+          </Button>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -199,7 +228,7 @@ const Admin = () => {
         {/* Users Table */}
         <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
           <CardHeader>
-            <CardTitle className="text-white">All Users</CardTitle>
+            <CardTitle className="text-white">All Registered Users</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -208,6 +237,7 @@ const Admin = () => {
                   <TableHead className="text-slate-300">Name</TableHead>
                   <TableHead className="text-slate-300">Email</TableHead>
                   <TableHead className="text-slate-300">Balance</TableHead>
+                  <TableHead className="text-slate-300">Registration Date</TableHead>
                   <TableHead className="text-slate-300">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -218,6 +248,9 @@ const Admin = () => {
                     <TableCell className="text-slate-300">{user.email}</TableCell>
                     <TableCell className="text-emerald-400 font-medium">
                       {formatAmount(user.balance)}
+                    </TableCell>
+                    <TableCell className="text-slate-400">
+                      {new Date(user.registrationDate).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
                       <Button

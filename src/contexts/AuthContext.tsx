@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
@@ -63,6 +62,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         name
       };
+      
+      // Save to registered users list for admin panel
+      const existingUsers = localStorage.getItem('capitalengine_registered_users');
+      const users = existingUsers ? JSON.parse(existingUsers) : [];
+      
+      const newUser = {
+        ...userData,
+        balance: 0,
+        registrationDate: new Date().toISOString()
+      };
+      
+      users.push(newUser);
+      localStorage.setItem('capitalengine_registered_users', JSON.stringify(users));
       
       setUser(userData);
       localStorage.setItem('capitalengine_user', JSON.stringify(userData));
