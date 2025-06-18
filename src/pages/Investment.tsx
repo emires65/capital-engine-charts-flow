@@ -4,14 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '../hooks/use-toast';
+import { useTransactions } from '../contexts/TransactionContext';
 import Header from '../components/Header';
-import CryptoChart from '../components/CryptoChart';
+import RealCryptoChart from '../components/RealCryptoChart';
 import JivoChat from '../components/JivoChat';
 
 const Investment = () => {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { addTransaction } = useTransactions();
 
   const BTC_WALLET_ADDRESS = 'bc1qgrvdcf03vgfkymdxaw52mkmkqej2g3phfjsmdv';
 
@@ -27,14 +29,37 @@ const Investment = () => {
       return;
     }
 
+    const investmentAmount = parseFloat(amount);
+    
+    if (investmentAmount < 100) {
+      toast({
+        title: "Minimum Investment",
+        description: "Minimum investment amount is $100.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
     
-    // Simulate processing
+    // Simulate processing and add transaction
     setTimeout(() => {
+      // Calculate approximate BTC amount (this would be real-time in production)
+      const btcAmount = investmentAmount / 45000; // Approximate BTC price
+
+      addTransaction({
+        type: 'deposit',
+        amount: investmentAmount,
+        status: 'pending',
+        btcAmount: btcAmount,
+        txHash: `pending_${Date.now()}`
+      });
+
       toast({
         title: "Investment Initiated",
         description: `Your investment of $${amount} has been initiated. Please send Bitcoin to the provided address.`,
       });
+      
       setLoading(false);
       setAmount('');
     }, 2000);
@@ -186,7 +211,7 @@ const Investment = () => {
 
           {/* Chart */}
           <div>
-            <CryptoChart />
+            <RealCryptoChart />
             
             <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-6">
               <CardHeader>

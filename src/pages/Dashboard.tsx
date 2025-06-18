@@ -3,12 +3,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTransactions } from '../contexts/TransactionContext';
 import Header from '../components/Header';
-import CryptoChart from '../components/CryptoChart';
+import RealCryptoChart from '../components/RealCryptoChart';
+import TransactionHistory from '../components/TransactionHistory';
+import CustomerSupport from '../components/CustomerSupport';
 import JivoChat from '../components/JivoChat';
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { balance, transactions } = useTransactions();
+
+  const formatAmount = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const completedDeposits = transactions.filter(t => t.type === 'deposit' && t.status === 'completed');
+  const totalDeposits = completedDeposits.reduce((sum, t) => sum + t.amount, 0);
+  const totalReturns = balance - totalDeposits;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800">
@@ -32,39 +49,45 @@ const Dashboard = () => {
               <CardTitle className="text-blue-400 text-sm font-medium">Portfolio Value</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">$12,485.67</div>
-              <div className="text-emerald-400 text-sm">+5.23% (+$620.15)</div>
+              <div className="text-2xl font-bold text-white">{formatAmount(balance)}</div>
+              <div className="text-emerald-400 text-sm">Available Balance</div>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-emerald-400 text-sm font-medium">Total Returns</CardTitle>
+              <CardTitle className="text-emerald-400 text-sm font-medium">Total Deposits</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">+18.45%</div>
-              <div className="text-emerald-400 text-sm">+$1,947.23</div>
+              <div className="text-2xl font-bold text-white">{formatAmount(totalDeposits)}</div>
+              <div className="text-slate-400 text-sm">{completedDeposits.length} deposits</div>
             </CardContent>
           </Card>
 
           <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-purple-400 text-sm font-medium">Active Investments</CardTitle>
+              <CardTitle className="text-purple-400 text-sm font-medium">Total Returns</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-white">3</div>
-              <div className="text-slate-400 text-sm">Bitcoin positions</div>
+              <div className="text-2xl font-bold text-white">
+                {formatAmount(Math.max(0, totalReturns))}
+              </div>
+              <div className={`text-sm ${totalReturns >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {totalReturns >= 0 ? 'Profit' : 'Loss'}
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Chart and Investment Section */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          <div>
-            <CryptoChart />
+        {/* Main Content Grid */}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Chart */}
+          <div className="lg:col-span-2">
+            <RealCryptoChart />
           </div>
           
-          <div className="space-y-6">
+          {/* Quick Actions */}
+          <div>
             <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
               <CardHeader>
                 <CardTitle className="text-white">Quick Actions</CardTitle>
@@ -86,38 +109,13 @@ const Dashboard = () => {
                 </Button>
               </CardContent>
             </Card>
-
-            <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-white">Recent Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center py-2 border-b border-slate-700">
-                    <div>
-                      <div className="text-white text-sm">Bitcoin Investment</div>
-                      <div className="text-slate-400 text-xs">2 hours ago</div>
-                    </div>
-                    <div className="text-emerald-400 text-sm">+$2,450.00</div>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-700">
-                    <div>
-                      <div className="text-white text-sm">Profit Withdrawal</div>
-                      <div className="text-slate-400 text-xs">1 day ago</div>
-                    </div>
-                    <div className="text-blue-400 text-sm">$1,200.00</div>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <div>
-                      <div className="text-white text-sm">Bitcoin Investment</div>
-                      <div className="text-slate-400 text-xs">3 days ago</div>
-                    </div>
-                    <div className="text-emerald-400 text-sm">+$3,100.00</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
+        </div>
+
+        {/* Transaction History and Support */}
+        <div className="grid lg:grid-cols-2 gap-8 mt-8">
+          <TransactionHistory />
+          <CustomerSupport />
         </div>
       </div>
     </div>

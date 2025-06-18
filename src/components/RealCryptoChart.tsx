@@ -1,0 +1,141 @@
+
+import { useEffect, useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+interface PriceData {
+  time: string;
+  price: number;
+  timestamp: number;
+}
+
+interface CoinGeckoData {
+  prices: [number, number][];
+}
+
+const RealCryptoChart = () => {
+  const [priceData, setPriceData] = useState<PriceData[]>([]);
+  const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const [priceChange, setPriceChange] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+
+  const fetchBitcoinPrice = async () => {
+    try {
+      const response = await fetch(
+        'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1&interval=hourly'
+      );
+      const data: CoinGeckoData = await response.json();
+      
+      const formattedData: PriceData[] = data.prices.map(([timestamp, price]) => ({
+        time: new Date(timestamp).toLocaleTimeString('en-US', { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        }),
+        price: price,
+        timestamp: timestamp
+      }));
+
+      setPriceData(formattedData);
+      
+      if (formattedData.length > 0) {
+        const latestPrice = formattedData[formattedData.length - 1].price;
+        const previousPrice = formattedData.length > 1 ? formattedData[formattedData.length - 2].price : latestPrice;
+        
+        setCurrentPrice(latestPrice);
+        setPriceChange(latestPrice - previousPrice);
+      }
+      
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching Bitcoin price:', error);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBitcoinPrice();
+    
+    // Update every 5 minutes
+    const interval = setInterval(fetchBitcoinPrice, 300000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(price);
+  };
+
+  if (loading) {
+    return (
+      <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
+        <CardContent className="flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <span className="text-white text-xl">Bitcoin (BTC)</span>
+            <span className="text-2xl">₿</span>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-white">
+              {formatPrice(currentPrice)}
+            </div>
+            <div className={`text-sm ${priceChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {priceChange >= 0 ? '+' : ''}{formatPrice(priceChange)} ({((priceChange / currentPrice) * 100).toFixed(2)}%)
+            </div>
+          </div>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={priceData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis 
+                dataKey="time" 
+                stroke="#9CA3AF"
+                fontSize={12}
+              />
+              <YAxis 
+                stroke="#9CA3AF"
+                fontSize={12}
+                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+              />
+              <Tooltip 
+                contentStyle={{
+                  backgroundColor: '#1F2937',
+                  border: '1px solid #374151',
+                  borderRadius: '8px',
+                  color: '#F3F4F6'
+                }}
+                formatter={(value: any) => [formatPrice(value), 'Price']}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="price" 
+                stroke="#3B82F6" 
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4, fill: '#3B82F6' }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export default RealCryptoChart;
