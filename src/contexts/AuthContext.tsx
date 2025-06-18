@@ -1,15 +1,20 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
   id: string;
   email: string;
   name: string;
+  balance?: number;
+  registrationDate?: string;
+  lastLoginDate?: string;
+  loginAttempts?: number;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   resetPassword: (email: string) => Promise<boolean>;
   isLoading: boolean;
@@ -29,60 +34,124 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message: string }> => {
     setIsLoading(true);
     try {
-      // Simulate API call
+      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const userData = {
-        id: Math.random().toString(36).substr(2, 9),
-        email,
-        name: email.split('@')[0]
+      // Get registered users
+      const existingUsers = localStorage.getItem('capitalengine_registered_users');
+      const users: User[] = existingUsers ? JSON.parse(existingUsers) : [];
+      
+      // Find user by email
+      const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      
+      if (!foundUser) {
+        setIsLoading(false);
+        return { success: false, message: "Account not found. Please check your email address." };
+      }
+      
+      // Get stored passwords
+      const storedPasswords = localStorage.getItem('capitalengine_passwords');
+      const passwords: { [email: string]: string } = storedPasswords ? JSON.parse(storedPasswords) : {};
+      
+      // Check password
+      if (passwords[email.toLowerCase()] !== password) {
+        // Track failed login attempt
+        const loginAttempts = localStorage.getItem('capitalengine_login_attempts');
+        const attempts: { [email: string]: number } = loginAttempts ? JSON.parse(loginAttempts) : {};
+        attempts[email.toLowerCase()] = (attempts[email.toLowerCase()] || 0) + 1;
+        localStorage.setItem('capitalengine_login_attempts', JSON.stringify(attempts));
+        
+        setIsLoading(false);
+        return { success: false, message: "Incorrect password. Please try again." };
+      }
+      
+      // Clear failed login attempts on successful login
+      const loginAttempts = localStorage.getItem('capitalengine_login_attempts');
+      if (loginAttempts) {
+        const attempts: { [email: string]: number } = JSON.parse(loginAttempts);
+        delete attempts[email.toLowerCase()];
+        localStorage.setItem('capitalengine_login_attempts', JSON.stringify(attempts));
+      }
+      
+      // Update last login date
+      const updatedUser = {
+        ...foundUser,
+        lastLoginDate: new Date().toISOString()
       };
       
-      setUser(userData);
-      localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+      // Update user in registered users list
+      const updatedUsers = users.map(u => u.email.toLowerCase() === email.toLowerCase() ? updatedUser : u);
+      localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
+      
+      setUser(updatedUser);
+      localStorage.setItem('capitalengine_user', JSON.stringify(updatedUser));
       setIsLoading(false);
-      return true;
+      return { success: true, message: "Login successful!" };
     } catch (error) {
       setIsLoading(false);
-      return false;
+      return { success: false, message: "An error occurred during login. Please try again." };
     }
   };
 
-  const register = async (name: string, email: string, password: string): Promise<boolean> => {
+  const register = async (name: string, email: string, password: string): Promise<{ success: boolean; message: string }> => {
     setIsLoading(true);
     try {
-      // Simulate API call
+      // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const userData = {
-        id: Math.random().toString(36).substr(2, 9),
-        email,
-        name
-      };
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setIsLoading(false);
+        return { success: false, message: "Please enter a valid email address." };
+      }
       
-      // Save to registered users list for admin panel
+      // Validate password strength
+      if (password.length < 6) {
+        setIsLoading(false);
+        return { success: false, message: "Password must be at least 6 characters long." };
+      }
+      
+      // Check if email already exists
       const existingUsers = localStorage.getItem('capitalengine_registered_users');
-      const users = existingUsers ? JSON.parse(existingUsers) : [];
+      const users: User[] = existingUsers ? JSON.parse(existingUsers) : [];
       
-      const newUser = {
-        ...userData,
+      const emailExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+      if (emailExists) {
+        setIsLoading(false);
+        return { success: false, message: "This email address is already registered. Please use a different email or try logging in." };
+      }
+      
+      // Create new user
+      const userData: User = {
+        id: Math.random().toString(36).substr(2, 9),
+        email: email.toLowerCase(),
+        name,
         balance: 0,
-        registrationDate: new Date().toISOString()
+        registrationDate: new Date().toISOString(),
+        lastLoginDate: new Date().toISOString()
       };
       
-      users.push(newUser);
+      // Save user to registered users list
+      users.push(userData);
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(users));
+      
+      // Store password separately for security
+      const storedPasswords = localStorage.getItem('capitalengine_passwords');
+      const passwords: { [email: string]: string } = storedPasswords ? JSON.parse(storedPasswords) : {};
+      passwords[email.toLowerCase()] = password;
+      localStorage.setItem('capitalengine_passwords', JSON.stringify(passwords));
       
       setUser(userData);
       localStorage.setItem('capitalengine_user', JSON.stringify(userData));
       setIsLoading(false);
-      return true;
+      return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };
     } catch (error) {
       setIsLoading(false);
-      return false;
+      return { success: false, message: "An error occurred during registration. Please try again." };
     }
   };
 

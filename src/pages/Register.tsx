@@ -22,6 +22,15 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!name || !email || !password || !confirmPassword) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (password !== confirmPassword) {
       toast({
         title: "Password Mismatch",
@@ -34,24 +43,25 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const success = await register(name, email, password);
-      if (success) {
+      const result = await register(name, email, password);
+      
+      if (result.success) {
         toast({
           title: "Registration Successful",
-          description: "Welcome to CapitalEngine! Your account has been created.",
+          description: result.message,
         });
         navigate('/dashboard');
       } else {
         toast({
           title: "Registration Failed",
-          description: "Unable to create account. Please try again.",
+          description: result.message,
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
         title: "Error",
-        description: "An error occurred during registration. Please try again.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -111,7 +121,7 @@ const Register = () => {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Create a password"
+                    placeholder="Create a password (min. 6 characters)"
                     required
                     className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
                   />
