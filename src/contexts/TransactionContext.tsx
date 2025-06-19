@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface Transaction {
@@ -88,6 +87,22 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const allTransactions = globalTransactions ? JSON.parse(globalTransactions) : [];
     const updatedAllTransactions = [newTransaction, ...allTransactions];
     localStorage.setItem('capitalengine_all_transactions', JSON.stringify(updatedAllTransactions));
+
+    // Dispatch event for admin panel to catch new transactions
+    const transactionEvent = new CustomEvent('newTransaction', { 
+      detail: { 
+        transaction: newTransaction,
+        allTransactions: updatedAllTransactions,
+        timestamp: new Date().toISOString()
+      } 
+    });
+    
+    // Dispatch multiple times to ensure admin panel catches it
+    window.dispatchEvent(transactionEvent);
+    setTimeout(() => window.dispatchEvent(transactionEvent), 100);
+    setTimeout(() => window.dispatchEvent(transactionEvent), 500);
+    
+    console.log('New transaction event dispatched for admin panel sync:', newTransaction);
   };
 
   const updateTransactionStatus = (transactionId: string, status: 'completed' | 'failed') => {

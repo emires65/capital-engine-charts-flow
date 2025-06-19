@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '../hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import AdminLogin from '../components/AdminLogin';
 
 interface User {
@@ -16,36 +17,71 @@ interface User {
   loginAttempts?: number;
 }
 
+interface Transaction {
+  id: string;
+  type: 'deposit' | 'withdrawal';
+  amount: number;
+  status: 'pending' | 'completed' | 'failed';
+  date: string;
+  btcAmount?: number;
+  txHash?: string;
+  userId?: string;
+  userEmail?: string;
+  userName?: string;
+}
+
 const Admin = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'users' | 'deposits'>('users');
   const { toast } = useToast();
 
   useEffect(() => {
     if (isAuthenticated) {
       loadUsers();
+      loadTransactions();
       
-      // Set up interval to refresh user data every 3 seconds for real-time sync
-      const interval = setInterval(loadUsers, 3000);
+      // Set up interval to refresh data every 2 seconds for better real-time sync
+      const interval = setInterval(() => {
+        loadUsers();
+        loadTransactions();
+      }, 2000);
       
       // Listen for new user registrations from the main website
       const handleUserRegistration = (event: CustomEvent) => {
         console.log('Admin panel detected new user registration:', event.detail);
-        loadUsers(); // Immediately refresh user list
+        setTimeout(() => {
+          loadUsers(); // Refresh user list after a small delay
+        }, 500);
         toast({
           title: "New User Registered",
           description: `${event.detail.user.name} (${event.detail.user.email}) just registered!`,
         });
       };
+
+      // Listen for new transactions
+      const handleNewTransaction = (event: CustomEvent) => {
+        console.log('Admin panel detected new transaction:', event.detail);
+        setTimeout(() => {
+          loadTransactions();
+        }, 500);
+        toast({
+          title: "New Transaction",
+          description: `New ${event.detail.transaction.type} transaction received`,
+        });
+      };
       
       window.addEventListener('userRegistered', handleUserRegistration as EventListener);
+      window.addEventListener('newTransaction', handleNewTransaction as EventListener);
       
       return () => {
         clearInterval(interval);
         window.removeEventListener('userRegistered', handleUserRegistration as EventListener);
+        window.removeEventListener('newTransaction', handleNewTransaction as EventListener);
       };
     }
   }, [isAuthenticated, toast]);
@@ -71,22 +107,23 @@ const Admin = () => {
       }));
       
       setUsers(formattedUsers);
-      
-      // Keep admin storage in sync
-      localStorage.setItem('capitalengine_admin_users', JSON.stringify(formattedUsers));
       console.log('Admin panel updated with users:', formattedUsers);
     } else {
-      console.log('No registered users found, checking admin storage...');
-      // Fallback to admin users if no registered users found
-      const adminUsers = localStorage.getItem('capitalengine_admin_users');
-      if (adminUsers) {
-        const adminUsersList = JSON.parse(adminUsers);
-        setUsers(adminUsersList);
-        console.log('Loaded from admin storage:', adminUsersList);
-      } else {
-        setUsers([]);
-        console.log('No users found in any storage');
-      }
+      console.log('No registered users found');
+      setUsers([]);
+    }
+  };
+
+  const loadTransactions = () => {
+    console.log('Admin panel loading transactions...');
+    const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
+    if (globalTransactions) {
+      const allTransactions = JSON.parse(globalTransactions);
+      console.log('Found transactions:', allTransactions);
+      setTransactions(allTransactions);
+    } else {
+      console.log('No transactions found');
+      setTransactions([]);
     }
   };
 
@@ -126,7 +163,6 @@ const Admin = () => {
       
       // Update all storage locations to keep them in sync
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
-      localStorage.setItem('capitalengine_admin_users', JSON.stringify(updatedUsers));
 
       // Update the balance for the currently logged-in user if they are the selected user
       const currentUser = localStorage.getItem('capitalengine_user');
@@ -162,6 +198,61 @@ const Admin = () => {
     }
   };
 
+  const approveTransaction = (transactionId: string, status: 'completed' | 'failed') => {
+    const updatedTransactions = transactions.map(transaction =>
+      transaction.id === transactionId ? { ...transaction, status } : transaction
+    );
+    
+    setTransactions(updatedTransactions);
+    localStorage.setItem('capitalengine_all_transactions', JSON.stringify(updatedTransactions));
+
+    // Update user transactions
+    const userTransactions = localStorage.getItem('capitalengine_transactions');
+    if (userTransactions) {
+      const userTxns = JSON.parse(userTransactions);
+      const updatedUserTxns = userTxns.map((transaction: Transaction) =>
+        transaction.id === transactionId ? { ...transaction, status } : transaction
+      );
+      localStorage.setItem('capitalengine_transactions', JSON.stringify(updatedUserTxns));
+    }
+
+    // If deposit is completed, update user balance
+    if (status === 'completed') {
+      const transaction = transactions.find(t => t.id === transactionId);
+      if (transaction && transaction.type === 'deposit' && transaction.userId) {
+        const updatedUsers = users.map(user => 
+          user.id === transaction.userId 
+            ? { ...user, balance: user.balance + transaction.amount }
+            : user
+        );
+        
+        setUsers(updatedUsers);
+        localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
+
+        // Update current user if they are the transaction owner
+        const currentUser = localStorage.getItem('capitalengine_user');
+        if (currentUser) {
+          const userData = JSON.parse(currentUser);
+          if (userData.id === transaction.userId) {
+            userData.balance += transaction.amount;
+            localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+            localStorage.setItem('capitalengine_balance', userData.balance.toString());
+          }
+        }
+
+        // Trigger balance update event
+        window.dispatchEvent(new CustomEvent('balanceUpdated', { 
+          detail: { userId: transaction.userId, newBalance: updatedUsers.find(u => u.id === transaction.userId)?.balance } 
+        }));
+      }
+    }
+
+    toast({
+      title: status === 'completed' ? "Transaction Approved" : "Transaction Rejected",
+      description: `Deposit has been marked as ${status}.`,
+    });
+  };
+
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -171,11 +262,12 @@ const Admin = () => {
     }).format(amount);
   };
 
-  const refreshUserData = () => {
+  const refreshData = () => {
     loadUsers();
+    loadTransactions();
     toast({
       title: "Refreshed",
-      description: "User data has been refreshed from the main website.",
+      description: "All data has been refreshed from the main website.",
     });
   };
 
@@ -183,7 +275,6 @@ const Admin = () => {
     if (window.confirm('Are you sure you want to delete ALL user data? This action cannot be undone.')) {
       // Clear all localStorage data
       localStorage.removeItem('capitalengine_registered_users');
-      localStorage.removeItem('capitalengine_admin_users');
       localStorage.removeItem('capitalengine_passwords');
       localStorage.removeItem('capitalengine_user');
       localStorage.removeItem('capitalengine_balance');
@@ -193,6 +284,7 @@ const Admin = () => {
       
       // Clear state
       setUsers([]);
+      setTransactions([]);
       setSelectedUser('');
       setBalanceAmount('');
       
@@ -218,10 +310,10 @@ const Admin = () => {
               CapitalEngine Admin Panel
             </h1>
             <p className="text-slate-400">
-              Real-time user management - Auto-syncs with website registrations
+              Real-time user management & deposit approval
             </p>
             <p className="text-slate-300 text-sm mt-1">
-              Total Users: {users.length} | Live sync active - checking every 3 seconds
+              Total Users: {users.length} | Pending Deposits: {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} | Live sync every 2 seconds
             </p>
           </div>
           <div className="flex gap-4">
@@ -233,7 +325,7 @@ const Admin = () => {
               Clear All Data
             </Button>
             <Button 
-              onClick={refreshUserData}
+              onClick={refreshData}
               variant="outline"
               className="border-slate-600 text-slate-300 hover:bg-slate-700"
             >
@@ -249,181 +341,263 @@ const Admin = () => {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Balance Update Form */}
-          <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-white">Update User Balance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={updateUserBalance} className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-slate-300 block mb-2">
-                    Select User
-                  </label>
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
-                    className="w-full bg-slate-700 border-slate-600 text-white rounded-md px-3 py-2"
-                    required
-                  >
-                    <option value="">Choose a user...</option>
-                    {users.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} ({user.email}) - Current: {formatAmount(user.balance)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-slate-300 block mb-2">
-                    New Balance (USD)
-                  </label>
-                  <Input
-                    type="number"
-                    value={balanceAmount}
-                    onChange={(e) => setBalanceAmount(e.target.value)}
-                    placeholder="Enter new balance"
-                    min="0"
-                    step="0.01"
-                    required
-                    className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
-                  />
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full bg-blue-600 hover:bg-blue-700"
-                  disabled={loading}
-                >
-                  {loading ? 'Updating...' : 'Update Balance'}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* User Statistics */}
-          <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="text-white">System Statistics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                  <span className="text-slate-300">Total Registered Users</span>
-                  <span className="text-white font-bold">{users.length}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                  <span className="text-slate-300">Total Balance Pool</span>
-                  <span className="text-emerald-400 font-bold">
-                    {formatAmount(users.reduce((sum, user) => sum + user.balance, 0))}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                  <span className="text-slate-300">Average Balance</span>
-                  <span className="text-blue-400 font-bold">
-                    {formatAmount(users.reduce((sum, user) => sum + user.balance, 0) / users.length || 0)}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                  <span className="text-slate-300">Active Users (Recent Login)</span>
-                  <span className="text-purple-400 font-bold">
-                    {users.filter(user => user.lastLoginDate && 
-                      new Date(user.lastLoginDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-                    ).length}
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Tab Navigation */}
+        <div className="mb-6">
+          <div className="flex gap-4">
+            <Button
+              onClick={() => setActiveTab('users')}
+              variant={activeTab === 'users' ? 'default' : 'outline'}
+              className={activeTab === 'users' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-600 text-slate-300 hover:bg-slate-700'}
+            >
+              User Management
+            </Button>
+            <Button
+              onClick={() => setActiveTab('deposits')}
+              variant={activeTab === 'deposits' ? 'default' : 'outline'}
+              className={activeTab === 'deposits' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-600 text-slate-300 hover:bg-slate-700'}
+            >
+              Deposit Approval ({transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length})
+            </Button>
+          </div>
         </div>
 
-        {/* Users Table */}
-        <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
-          <CardHeader>
-            <CardTitle className="text-white">
-              All Registered Users - Live Data from Website
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {users.length === 0 ? (
-              <div className="text-center text-slate-400 py-8">
-                <p>No users registered yet.</p>
-                <p className="text-sm mt-2">Users will appear here automatically when they register on the website.</p>
-                <p className="text-xs mt-1 text-slate-500">Live sync active - checking every 3 seconds</p>
-                <Button 
-                  onClick={clearAllData}
-                  variant="outline"
-                  className="mt-4 border-red-600 text-red-400 hover:bg-red-900/20"
-                >
-                  Clear All Data (Fresh Start)
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <p className="text-slate-300 text-sm">
-                    🟢 Live sync active - New registrations appear automatically
-                  </p>
-                  <Button 
-                    onClick={clearAllData}
-                    variant="outline"
-                    size="sm"
-                    className="border-red-600 text-red-400 hover:bg-red-900/20"
-                  >
-                    Clear All Data
-                  </Button>
+        {activeTab === 'users' && (
+          <>
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Balance Update Form */}
+              <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-white">Update User Balance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={updateUserBalance} className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-slate-300 block mb-2">
+                        Select User
+                      </label>
+                      <select
+                        value={selectedUser}
+                        onChange={(e) => setSelectedUser(e.target.value)}
+                        className="w-full bg-slate-700 border-slate-600 text-white rounded-md px-3 py-2"
+                        required
+                      >
+                        <option value="">Choose a user...</option>
+                        {users.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.name} ({user.email}) - Current: {formatAmount(user.balance)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-sm font-medium text-slate-300 block mb-2">
+                        New Balance (USD)
+                      </label>
+                      <Input
+                        type="number"
+                        value={balanceAmount}
+                        onChange={(e) => setBalanceAmount(e.target.value)}
+                        placeholder="Enter new balance"
+                        min="0"
+                        step="0.01"
+                        required
+                        className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                      />
+                    </div>
+
+                    <Button 
+                      type="submit" 
+                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      disabled={loading}
+                    >
+                      {loading ? 'Updating...' : 'Update Balance'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* User Statistics */}
+              <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="text-white">System Statistics</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
+                      <span className="text-slate-300">Total Registered Users</span>
+                      <span className="text-white font-bold">{users.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
+                      <span className="text-slate-300">Total Balance Pool</span>
+                      <span className="text-emerald-400 font-bold">
+                        {formatAmount(users.reduce((sum, user) => sum + user.balance, 0))}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
+                      <span className="text-slate-300">Pending Deposits</span>
+                      <span className="text-yellow-400 font-bold">
+                        {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
+                      <span className="text-slate-300">Total Transactions</span>
+                      <span className="text-purple-400 font-bold">
+                        {transactions.length}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Users Table */}
+            <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
+              <CardHeader>
+                <CardTitle className="text-white">
+                  All Registered Users - Live Data from Website
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {users.length === 0 ? (
+                  <div className="text-center text-slate-400 py-8">
+                    <p>No users registered yet.</p>
+                    <p className="text-sm mt-2">Users will appear here automatically when they register on the website.</p>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-slate-300">Name</TableHead>
+                        <TableHead className="text-slate-300">Email</TableHead>
+                        <TableHead className="text-slate-300">Balance</TableHead>
+                        <TableHead className="text-slate-300">Registration Date</TableHead>
+                        <TableHead className="text-slate-300">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.map((user) => (
+                        <TableRow key={user.id}>
+                          <TableCell className="text-white">{user.name}</TableCell>
+                          <TableCell className="text-slate-300">{user.email}</TableCell>
+                          <TableCell className="text-emerald-400 font-medium">
+                            {formatAmount(user.balance)}
+                          </TableCell>
+                          <TableCell className="text-slate-400">
+                            {new Date(user.registrationDate).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedUser(user.id);
+                                setBalanceAmount(user.balance.toString());
+                              }}
+                              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                            >
+                              Edit Balance
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        {activeTab === 'deposits' && (
+          <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-white">
+                Deposit Approval - Pending Transactions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {transactions.filter(t => t.type === 'deposit').length === 0 ? (
+                <div className="text-center text-slate-400 py-8">
+                  <p>No deposit transactions found.</p>
+                  <p className="text-sm mt-2">Deposits will appear here when users make them.</p>
                 </div>
+              ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-slate-300">Name</TableHead>
+                      <TableHead className="text-slate-300">User</TableHead>
                       <TableHead className="text-slate-300">Email</TableHead>
-                      <TableHead className="text-slate-300">Balance</TableHead>
-                      <TableHead className="text-slate-300">Registration Date</TableHead>
-                      <TableHead className="text-slate-300">Last Login</TableHead>
+                      <TableHead className="text-slate-300">Amount</TableHead>
+                      <TableHead className="text-slate-300">BTC Amount</TableHead>
+                      <TableHead className="text-slate-300">Date</TableHead>
+                      <TableHead className="text-slate-300">Status</TableHead>
                       <TableHead className="text-slate-300">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell className="text-white">{user.name}</TableCell>
-                        <TableCell className="text-slate-300">{user.email}</TableCell>
-                        <TableCell className="text-emerald-400 font-medium">
-                          {formatAmount(user.balance)}
-                        </TableCell>
-                        <TableCell className="text-slate-400">
-                          {new Date(user.registrationDate).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-slate-400">
-                          {user.lastLoginDate 
-                            ? new Date(user.lastLoginDate).toLocaleDateString()
-                            : 'Never'
-                          }
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedUser(user.id);
-                              setBalanceAmount(user.balance.toString());
-                            }}
-                            className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                          >
-                            Edit Balance
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {transactions
+                      .filter(t => t.type === 'deposit')
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((transaction) => (
+                        <TableRow key={transaction.id}>
+                          <TableCell className="text-white">{transaction.userName || 'Unknown'}</TableCell>
+                          <TableCell className="text-slate-300">{transaction.userEmail || 'Unknown'}</TableCell>
+                          <TableCell className="text-emerald-400 font-medium">
+                            {formatAmount(transaction.amount)}
+                          </TableCell>
+                          <TableCell className="text-orange-400">
+                            {transaction.btcAmount ? `${transaction.btcAmount.toFixed(8)} BTC` : 'N/A'}
+                          </TableCell>
+                          <TableCell className="text-slate-400">
+                            {new Date(transaction.date).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={
+                                transaction.status === 'completed' ? 'default' : 
+                                transaction.status === 'failed' ? 'destructive' : 
+                                'secondary'
+                              }
+                              className={
+                                transaction.status === 'completed' ? 'bg-green-600' :
+                                transaction.status === 'failed' ? 'bg-red-600' :
+                                'bg-yellow-600'
+                              }
+                            >
+                              {transaction.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {transaction.status === 'pending' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => approveTransaction(transaction.id, 'completed')}
+                                  className="border-green-600 text-green-400 hover:bg-green-900/20"
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => approveTransaction(transaction.id, 'failed')}
+                                  className="border-red-600 text-red-400 hover:bg-red-900/20"
+                                >
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                   </TableBody>
                 </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

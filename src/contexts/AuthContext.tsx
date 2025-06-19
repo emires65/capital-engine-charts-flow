@@ -140,12 +140,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, message: "This email address is already registered. Please use a different email or try logging in." };
       }
       
-      // Create new user with $0 balance
+      // Create new user with $0 balance (always start with $0)
       const userData: User = {
         id: Math.random().toString(36).substr(2, 9),
         email: email.toLowerCase(),
         name,
-        balance: 0, // Always start with $0
+        balance: 0, // Always start with $0 - no exceptions
         registrationDate: new Date().toISOString(),
         lastLoginDate: new Date().toISOString()
       };
@@ -153,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Add user to registered users list
       const updatedUsers = [...users, userData];
       
-      // Update all storage locations immediately for real-time sync
+      // Update storage immediately for real-time sync
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
       
       // Store password separately for security
@@ -167,19 +167,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('capitalengine_user', JSON.stringify(userData));
       localStorage.setItem('capitalengine_balance', '0'); // Initialize with $0
       
-      // Immediately trigger admin panel update
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userRegistered', { 
-          detail: { user: userData, allUsers: updatedUsers } 
-        }));
-      }, 100);
-      
       console.log('New user registered:', userData);
-      console.log('All registered users:', updatedUsers);
+      console.log('All registered users after registration:', updatedUsers);
+      
+      // Dispatch registration event immediately for admin panel
+      const registrationEvent = new CustomEvent('userRegistered', { 
+        detail: { 
+          user: userData, 
+          allUsers: updatedUsers,
+          timestamp: new Date().toISOString()
+        } 
+      });
+      
+      // Dispatch multiple times to ensure admin panel catches it
+      window.dispatchEvent(registrationEvent);
+      setTimeout(() => window.dispatchEvent(registrationEvent), 100);
+      setTimeout(() => window.dispatchEvent(registrationEvent), 500);
+      
+      console.log('User registration event dispatched for admin panel sync');
       
       setIsLoading(false);
       return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };
     } catch (error) {
+      console.error('Registration error:', error);
       setIsLoading(false);
       return { success: false, message: "An error occurred during registration. Please try again." };
     }
