@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +12,8 @@ interface User {
   name: string;
   balance: number;
   registrationDate: string;
+  lastLoginDate?: string;
+  loginAttempts?: number;
 }
 
 const Admin = () => {
@@ -26,32 +27,41 @@ const Admin = () => {
   useEffect(() => {
     if (isAuthenticated) {
       loadUsers();
+      // Set up interval to refresh user data every 5 seconds
+      const interval = setInterval(loadUsers, 5000);
+      return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
 
   const loadUsers = () => {
-    // Load registered users from localStorage
+    // Load registered users from localStorage (main source of truth)
     const registeredUsers = localStorage.getItem('capitalengine_registered_users');
-    const adminUsers = localStorage.getItem('capitalengine_admin_users');
-    
-    let allUsers: User[] = [];
     
     if (registeredUsers) {
       const regUsers = JSON.parse(registeredUsers);
-      allUsers = regUsers.map((user: any) => ({
-        ...user,
+      const formattedUsers: User[] = regUsers.map((user: any) => ({
+        id: user.id,
+        email: user.email,
+        name: user.name,
         balance: user.balance || 0,
-        registrationDate: user.registrationDate || new Date().toISOString()
+        registrationDate: user.registrationDate || new Date().toISOString(),
+        lastLoginDate: user.lastLoginDate,
+        loginAttempts: user.loginAttempts || 0
       }));
+      
+      setUsers(formattedUsers);
+      
+      // Also update admin users storage for consistency
+      localStorage.setItem('capitalengine_admin_users', JSON.stringify(formattedUsers));
+    } else {
+      // Fallback to admin users if no registered users found
+      const adminUsers = localStorage.getItem('capitalengine_admin_users');
+      if (adminUsers) {
+        setUsers(JSON.parse(adminUsers));
+      } else {
+        setUsers([]);
+      }
     }
-    
-    // Merge with existing admin users if any
-    if (adminUsers && !registeredUsers) {
-      allUsers = JSON.parse(adminUsers);
-    }
-    
-    setUsers(allUsers);
-    localStorage.setItem('capitalengine_admin_users', JSON.stringify(allUsers));
   };
 
   const updateUserBalance = async (e: React.FormEvent) => {
@@ -79,6 +89,7 @@ const Admin = () => {
     setLoading(true);
 
     try {
+      // Update users array
       const updatedUsers = users.map(user => 
         user.id === selectedUser 
           ? { ...user, balance: amount }
@@ -86,14 +97,25 @@ const Admin = () => {
       );
 
       setUsers(updatedUsers);
+      
+      // Update both storage locations to keep them in sync
+      localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
       localStorage.setItem('capitalengine_admin_users', JSON.stringify(updatedUsers));
 
-      // Update the user's balance in the transaction context
-      localStorage.setItem('capitalengine_balance', amount.toString());
+      // Update the balance for the currently logged-in user if they are the selected user
+      const currentUser = localStorage.getItem('capitalengine_user');
+      if (currentUser) {
+        const userData = JSON.parse(currentUser);
+        if (userData.id === selectedUser) {
+          userData.balance = amount;
+          localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+          localStorage.setItem('capitalengine_balance', amount.toString());
+        }
+      }
 
       toast({
         title: "Success",
-        description: "User balance updated successfully.",
+        description: `Balance updated to $${amount.toFixed(2)} successfully.`,
       });
 
       setSelectedUser('');
@@ -118,6 +140,14 @@ const Admin = () => {
     }).format(amount);
   };
 
+  const refreshUserData = () => {
+    loadUsers();
+    toast({
+      title: "Refreshed",
+      description: "User data has been refreshed from the main website.",
+    });
+  };
+
   if (!isAuthenticated) {
     return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
   }
@@ -131,16 +161,25 @@ const Admin = () => {
               CapitalEngine Admin Panel
             </h1>
             <p className="text-slate-400">
-              Manage user accounts and balances
+              Manage user accounts and balances - Auto-syncs with website registrations
             </p>
           </div>
-          <Button 
-            onClick={() => setIsAuthenticated(false)}
-            variant="outline"
-            className="border-slate-600 text-slate-300 hover:bg-slate-700"
-          >
-            Logout
-          </Button>
+          <div className="flex gap-4">
+            <Button 
+              onClick={refreshUserData}
+              variant="outline"
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              Refresh Data
+            </Button>
+            <Button 
+              onClick={() => setIsAuthenticated(false)}
+              variant="outline"
+              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+            >
+              Logout
+            </Button>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
@@ -164,7 +203,7 @@ const Admin = () => {
                     <option value="">Choose a user...</option>
                     {users.map((user) => (
                       <option key={user.id} value={user.id}>
-                        {user.name} ({user.email})
+                        {user.name} ({user.email}) - Current: {formatAmount(user.balance)}
                       </option>
                     ))}
                   </select>
@@ -205,11 +244,11 @@ const Admin = () => {
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                  <span className="text-slate-300">Total Users</span>
+                  <span className="text-slate-300">Total Registered Users</span>
                   <span className="text-white font-bold">{users.length}</span>
                 </div>
                 <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                  <span className="text-slate-300">Total Balance</span>
+                  <span className="text-slate-300">Total Balance Pool</span>
                   <span className="text-emerald-400 font-bold">
                     {formatAmount(users.reduce((sum, user) => sum + user.balance, 0))}
                   </span>
@@ -220,6 +259,14 @@ const Admin = () => {
                     {formatAmount(users.reduce((sum, user) => sum + user.balance, 0) / users.length || 0)}
                   </span>
                 </div>
+                <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
+                  <span className="text-slate-300">Active Users (Recent Login)</span>
+                  <span className="text-purple-400 font-bold">
+                    {users.filter(user => user.lastLoginDate && 
+                      new Date(user.lastLoginDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                    ).length}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -228,44 +275,61 @@ const Admin = () => {
         {/* Users Table */}
         <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
           <CardHeader>
-            <CardTitle className="text-white">All Registered Users</CardTitle>
+            <CardTitle className="text-white">All Registered Users from Website</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-slate-300">Name</TableHead>
-                  <TableHead className="text-slate-300">Email</TableHead>
-                  <TableHead className="text-slate-300">Balance</TableHead>
-                  <TableHead className="text-slate-300">Registration Date</TableHead>
-                  <TableHead className="text-slate-300">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell className="text-white">{user.name}</TableCell>
-                    <TableCell className="text-slate-300">{user.email}</TableCell>
-                    <TableCell className="text-emerald-400 font-medium">
-                      {formatAmount(user.balance)}
-                    </TableCell>
-                    <TableCell className="text-slate-400">
-                      {new Date(user.registrationDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedUser(user.id)}
-                        className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                      >
-                        Select
-                      </Button>
-                    </TableCell>
+            {users.length === 0 ? (
+              <div className="text-center text-slate-400 py-8">
+                <p>No users registered yet.</p>
+                <p className="text-sm mt-2">Users will appear here automatically when they register on the website.</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-slate-300">Name</TableHead>
+                    <TableHead className="text-slate-300">Email</TableHead>
+                    <TableHead className="text-slate-300">Balance</TableHead>
+                    <TableHead className="text-slate-300">Registration Date</TableHead>
+                    <TableHead className="text-slate-300">Last Login</TableHead>
+                    <TableHead className="text-slate-300">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="text-white">{user.name}</TableCell>
+                      <TableCell className="text-slate-300">{user.email}</TableCell>
+                      <TableCell className="text-emerald-400 font-medium">
+                        {formatAmount(user.balance)}
+                      </TableCell>
+                      <TableCell className="text-slate-400">
+                        {new Date(user.registrationDate).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-slate-400">
+                        {user.lastLoginDate 
+                          ? new Date(user.lastLoginDate).toLocaleDateString()
+                          : 'Never'
+                        }
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedUser(user.id);
+                            setBalanceAmount(user.balance.toString());
+                          }}
+                          className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                        >
+                          Edit Balance
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </div>

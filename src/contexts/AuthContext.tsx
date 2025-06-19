@@ -29,7 +29,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const savedUser = localStorage.getItem('capitalengine_user');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const userData = JSON.parse(savedUser);
+      // Sync user data with registered users list if it exists
+      const registeredUsers = localStorage.getItem('capitalengine_registered_users');
+      if (registeredUsers) {
+        const users: User[] = JSON.parse(registeredUsers);
+        const updatedUser = users.find(u => u.id === userData.id);
+        if (updatedUser) {
+          setUser(updatedUser);
+          localStorage.setItem('capitalengine_user', JSON.stringify(updatedUser));
+        } else {
+          setUser(userData);
+        }
+      } else {
+        setUser(userData);
+      }
     }
     setIsLoading(false);
   }, []);
@@ -135,9 +149,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLoginDate: new Date().toISOString()
       };
       
-      // Save user to registered users list
+      // Save user to registered users list (primary storage for admin panel)
       users.push(userData);
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(users));
+      
+      // Also update admin users storage for immediate sync
+      localStorage.setItem('capitalengine_admin_users', JSON.stringify(users));
       
       // Store password separately for security
       const storedPasswords = localStorage.getItem('capitalengine_passwords');
@@ -145,10 +162,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       passwords[email.toLowerCase()] = password;
       localStorage.setItem('capitalengine_passwords', JSON.stringify(passwords));
       
+      // Set current user
       setUser(userData);
       localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+      
+      // Initialize user balance
+      localStorage.setItem('capitalengine_balance', '0');
+      
       setIsLoading(false);
-      return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };
+      return { success: true, message: "Account created successfully! Welcome to CapitalEngine. Your account is now visible in the admin panel." };
     } catch (error) {
       setIsLoading(false);
       return { success: false, message: "An error occurred during registration. Please try again." };
