@@ -179,6 +179,32 @@ const Admin = () => {
     });
   };
 
+  const clearAllData = () => {
+    if (window.confirm('Are you sure you want to delete ALL user data? This action cannot be undone.')) {
+      // Clear all localStorage data
+      localStorage.removeItem('capitalengine_registered_users');
+      localStorage.removeItem('capitalengine_admin_users');
+      localStorage.removeItem('capitalengine_passwords');
+      localStorage.removeItem('capitalengine_user');
+      localStorage.removeItem('capitalengine_balance');
+      localStorage.removeItem('capitalengine_transactions');
+      localStorage.removeItem('capitalengine_all_transactions');
+      localStorage.removeItem('capitalengine_login_attempts');
+      
+      // Clear state
+      setUsers([]);
+      setSelectedUser('');
+      setBalanceAmount('');
+      
+      toast({
+        title: "All Data Cleared",
+        description: "All user data has been deleted. You can now test fresh registrations.",
+      });
+      
+      console.log('All user data cleared from localStorage');
+    }
+  };
+
   if (!isAuthenticated) {
     return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
   }
@@ -199,6 +225,13 @@ const Admin = () => {
             </p>
           </div>
           <div className="flex gap-4">
+            <Button 
+              onClick={clearAllData}
+              variant="destructive"
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Clear All Data
+            </Button>
             <Button 
               onClick={refreshUserData}
               variant="outline"
@@ -319,12 +352,29 @@ const Admin = () => {
                 <p>No users registered yet.</p>
                 <p className="text-sm mt-2">Users will appear here automatically when they register on the website.</p>
                 <p className="text-xs mt-1 text-slate-500">Live sync active - checking every 3 seconds</p>
+                <Button 
+                  onClick={clearAllData}
+                  variant="outline"
+                  className="mt-4 border-red-600 text-red-400 hover:bg-red-900/20"
+                >
+                  Clear All Data (Fresh Start)
+                </Button>
               </div>
             ) : (
               <div className="space-y-4">
-                <p className="text-slate-300 text-sm">
-                  🟢 Live sync active - New registrations appear automatically
-                </p>
+                <div className="flex justify-between items-center">
+                  <p className="text-slate-300 text-sm">
+                    🟢 Live sync active - New registrations appear automatically
+                  </p>
+                  <Button 
+                    onClick={clearAllData}
+                    variant="outline"
+                    size="sm"
+                    className="border-red-600 text-red-400 hover:bg-red-900/20"
+                  >
+                    Clear All Data
+                  </Button>
+                </div>
                 <Table>
                   <TableHeader>
                     <TableRow>
