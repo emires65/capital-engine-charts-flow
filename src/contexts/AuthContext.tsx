@@ -102,6 +102,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       setUser(updatedUser);
       localStorage.setItem('capitalengine_user', JSON.stringify(updatedUser));
+      localStorage.setItem('capitalengine_balance', (updatedUser.balance || 0).toString());
       setIsLoading(false);
       return { success: true, message: "Login successful!" };
     } catch (error) {
@@ -139,12 +140,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, message: "This email address is already registered. Please use a different email or try logging in." };
       }
       
-      // Create new user
+      // Create new user with $0 balance
       const userData: User = {
         id: Math.random().toString(36).substr(2, 9),
         email: email.toLowerCase(),
         name,
-        balance: 0,
+        balance: 0, // Always start with $0
         registrationDate: new Date().toISOString(),
         lastLoginDate: new Date().toISOString()
       };
@@ -152,9 +153,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Add user to registered users list
       const updatedUsers = [...users, userData];
       
-      // Update all storage locations simultaneously for immediate sync
+      // Update all storage locations immediately for real-time sync
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
-      localStorage.setItem('capitalengine_admin_users', JSON.stringify(updatedUsers));
       
       // Store password separately for security
       const storedPasswords = localStorage.getItem('capitalengine_passwords');
@@ -165,17 +165,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Set current user
       setUser(userData);
       localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+      localStorage.setItem('capitalengine_balance', '0'); // Initialize with $0
       
-      // Initialize user balance
-      localStorage.setItem('capitalengine_balance', '0');
-      
-      // Trigger a custom event to notify admin panel of new registration
-      window.dispatchEvent(new CustomEvent('userRegistered', { 
-        detail: { user: userData, allUsers: updatedUsers } 
-      }));
+      // Immediately trigger admin panel update
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userRegistered', { 
+          detail: { user: userData, allUsers: updatedUsers } 
+        }));
+      }, 100);
       
       console.log('New user registered:', userData);
-      console.log('Updated users list:', updatedUsers);
+      console.log('All registered users:', updatedUsers);
       
       setIsLoading(false);
       return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };
