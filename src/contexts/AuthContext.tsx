@@ -149,12 +149,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLoginDate: new Date().toISOString()
       };
       
-      // Save user to registered users list (primary storage for admin panel)
-      users.push(userData);
-      localStorage.setItem('capitalengine_registered_users', JSON.stringify(users));
+      // Add user to registered users list
+      const updatedUsers = [...users, userData];
       
-      // Also update admin users storage for immediate sync
-      localStorage.setItem('capitalengine_admin_users', JSON.stringify(users));
+      // Update all storage locations simultaneously for immediate sync
+      localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
+      localStorage.setItem('capitalengine_admin_users', JSON.stringify(updatedUsers));
       
       // Store password separately for security
       const storedPasswords = localStorage.getItem('capitalengine_passwords');
@@ -169,8 +169,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Initialize user balance
       localStorage.setItem('capitalengine_balance', '0');
       
+      // Trigger a custom event to notify admin panel of new registration
+      window.dispatchEvent(new CustomEvent('userRegistered', { 
+        detail: { user: userData, allUsers: updatedUsers } 
+      }));
+      
+      console.log('New user registered:', userData);
+      console.log('Updated users list:', updatedUsers);
+      
       setIsLoading(false);
-      return { success: true, message: "Account created successfully! Welcome to CapitalEngine. Your account is now visible in the admin panel." };
+      return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };
     } catch (error) {
       setIsLoading(false);
       return { success: false, message: "An error occurred during registration. Please try again." };

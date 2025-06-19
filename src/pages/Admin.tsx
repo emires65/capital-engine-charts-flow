@@ -27,18 +27,39 @@ const Admin = () => {
   useEffect(() => {
     if (isAuthenticated) {
       loadUsers();
-      // Set up interval to refresh user data every 5 seconds
-      const interval = setInterval(loadUsers, 5000);
-      return () => clearInterval(interval);
+      
+      // Set up interval to refresh user data every 3 seconds for real-time sync
+      const interval = setInterval(loadUsers, 3000);
+      
+      // Listen for new user registrations from the main website
+      const handleUserRegistration = (event: CustomEvent) => {
+        console.log('Admin panel detected new user registration:', event.detail);
+        loadUsers(); // Immediately refresh user list
+        toast({
+          title: "New User Registered",
+          description: `${event.detail.user.name} (${event.detail.user.email}) just registered!`,
+        });
+      };
+      
+      window.addEventListener('userRegistered', handleUserRegistration as EventListener);
+      
+      return () => {
+        clearInterval(interval);
+        window.removeEventListener('userRegistered', handleUserRegistration as EventListener);
+      };
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, toast]);
 
   const loadUsers = () => {
-    // Load registered users from localStorage (main source of truth)
+    console.log('Admin panel loading users...');
+    
+    // Load from registered users (primary source)
     const registeredUsers = localStorage.getItem('capitalengine_registered_users');
     
     if (registeredUsers) {
       const regUsers = JSON.parse(registeredUsers);
+      console.log('Found registered users:', regUsers);
+      
       const formattedUsers: User[] = regUsers.map((user: any) => ({
         id: user.id,
         email: user.email,
@@ -51,15 +72,20 @@ const Admin = () => {
       
       setUsers(formattedUsers);
       
-      // Also update admin users storage for consistency
+      // Keep admin storage in sync
       localStorage.setItem('capitalengine_admin_users', JSON.stringify(formattedUsers));
+      console.log('Admin panel updated with users:', formattedUsers);
     } else {
+      console.log('No registered users found, checking admin storage...');
       // Fallback to admin users if no registered users found
       const adminUsers = localStorage.getItem('capitalengine_admin_users');
       if (adminUsers) {
-        setUsers(JSON.parse(adminUsers));
+        const adminUsersList = JSON.parse(adminUsers);
+        setUsers(adminUsersList);
+        console.log('Loaded from admin storage:', adminUsersList);
       } else {
         setUsers([]);
+        console.log('No users found in any storage');
       }
     }
   };
@@ -98,7 +124,7 @@ const Admin = () => {
 
       setUsers(updatedUsers);
       
-      // Update both storage locations to keep them in sync
+      // Update all storage locations to keep them in sync
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
       localStorage.setItem('capitalengine_admin_users', JSON.stringify(updatedUsers));
 
@@ -113,9 +139,14 @@ const Admin = () => {
         }
       }
 
+      // Trigger event to notify user dashboard of balance change
+      window.dispatchEvent(new CustomEvent('balanceUpdated', { 
+        detail: { userId: selectedUser, newBalance: amount } 
+      }));
+
       toast({
         title: "Success",
-        description: `Balance updated to $${amount.toFixed(2)} successfully.`,
+        description: `Balance updated to $${amount.toFixed(2)} successfully. User will see the change immediately.`,
       });
 
       setSelectedUser('');
@@ -161,7 +192,10 @@ const Admin = () => {
               CapitalEngine Admin Panel
             </h1>
             <p className="text-slate-400">
-              Manage user accounts and balances - Auto-syncs with website registrations
+              Real-time user management - Auto-syncs with website registrations
+            </p>
+            <p className="text-slate-300 text-sm mt-1">
+              Total Users: {users.length} | Live sync active - checking every 3 seconds
             </p>
           </div>
           <div className="flex gap-4">
@@ -275,60 +309,68 @@ const Admin = () => {
         {/* Users Table */}
         <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
           <CardHeader>
-            <CardTitle className="text-white">All Registered Users from Website</CardTitle>
+            <CardTitle className="text-white">
+              All Registered Users - Live Data from Website
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {users.length === 0 ? (
               <div className="text-center text-slate-400 py-8">
                 <p>No users registered yet.</p>
                 <p className="text-sm mt-2">Users will appear here automatically when they register on the website.</p>
+                <p className="text-xs mt-1 text-slate-500">Live sync active - checking every 3 seconds</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-slate-300">Name</TableHead>
-                    <TableHead className="text-slate-300">Email</TableHead>
-                    <TableHead className="text-slate-300">Balance</TableHead>
-                    <TableHead className="text-slate-300">Registration Date</TableHead>
-                    <TableHead className="text-slate-300">Last Login</TableHead>
-                    <TableHead className="text-slate-300">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className="text-white">{user.name}</TableCell>
-                      <TableCell className="text-slate-300">{user.email}</TableCell>
-                      <TableCell className="text-emerald-400 font-medium">
-                        {formatAmount(user.balance)}
-                      </TableCell>
-                      <TableCell className="text-slate-400">
-                        {new Date(user.registrationDate).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-slate-400">
-                        {user.lastLoginDate 
-                          ? new Date(user.lastLoginDate).toLocaleDateString()
-                          : 'Never'
-                        }
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedUser(user.id);
-                            setBalanceAmount(user.balance.toString());
-                          }}
-                          className="border-slate-600 text-slate-300 hover:bg-slate-700"
-                        >
-                          Edit Balance
-                        </Button>
-                      </TableCell>
+              <div className="space-y-4">
+                <p className="text-slate-300 text-sm">
+                  🟢 Live sync active - New registrations appear automatically
+                </p>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-slate-300">Name</TableHead>
+                      <TableHead className="text-slate-300">Email</TableHead>
+                      <TableHead className="text-slate-300">Balance</TableHead>
+                      <TableHead className="text-slate-300">Registration Date</TableHead>
+                      <TableHead className="text-slate-300">Last Login</TableHead>
+                      <TableHead className="text-slate-300">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {users.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell className="text-white">{user.name}</TableCell>
+                        <TableCell className="text-slate-300">{user.email}</TableCell>
+                        <TableCell className="text-emerald-400 font-medium">
+                          {formatAmount(user.balance)}
+                        </TableCell>
+                        <TableCell className="text-slate-400">
+                          {new Date(user.registrationDate).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-slate-400">
+                          {user.lastLoginDate 
+                            ? new Date(user.lastLoginDate).toLocaleDateString()
+                            : 'Never'
+                          }
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedUser(user.id);
+                              setBalanceAmount(user.balance.toString());
+                            }}
+                            className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                          >
+                            Edit Balance
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
