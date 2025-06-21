@@ -1,24 +1,8 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  balance?: number;
-  registrationDate?: string;
-  lastLoginDate?: string;
-  loginAttempts?: number;
-}
-
-interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
-  register: (name: string, email: string, password: string) => Promise<{ success: boolean; message: string }>;
-  logout: () => void;
-  resetPassword: (email: string) => Promise<boolean>;
-  isLoading: boolean;
-}
+import { User, AuthContextType } from '../types/auth';
+import { AuthStorage } from '../utils/authStorage';
+import { AuthService } from '../services/authService';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -27,23 +11,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('capitalengine_user');
+    const savedUser = AuthStorage.getCurrentUser();
     if (savedUser) {
-      const userData = JSON.parse(savedUser);
       // Sync user data with registered users list if it exists
-      const registeredUsers = localStorage.getItem('capitalengine_registered_users');
-      if (registeredUsers) {
-        const users: User[] = JSON.parse(registeredUsers);
-        const updatedUser = users.find(u => u.id === userData.id);
-        if (updatedUser) {
-          setUser(updatedUser);
-          localStorage.setItem('capitalengine_user', JSON.stringify(updatedUser));
-        } else {
-          setUser(userData);
-        }
-      } else {
-        setUser(userData);
+      const syncedUser = AuthStorage.syncUserWithRegisteredList(savedUser);
+      if (syncedUser !== savedUser) {
+        AuthStorage.setCurrentUser(syncedUser);
       }
+      setUser(syncedUser);
     }
     setIsLoading(false);
   }, []);
@@ -54,55 +29,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Simulate API call delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Get registered users
-      const existingUsers = localStorage.getItem('capitalengine_registered_users');
-      const users: User[] = existingUsers ? JSON.parse(existingUsers) : [];
-      
       // Find user by email
-      const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const foundUser = AuthService.findUserByEmail(email);
       
       if (!foundUser) {
         setIsLoading(false);
         return { success: false, message: "Account not found. Please check your email address." };
       }
       
-      // Get stored passwords
-      const storedPasswords = localStorage.getItem('capitalengine_passwords');
-      const passwords: { [email: string]: string } = storedPasswords ? JSON.parse(storedPasswords) : {};
-      
       // Check password
-      if (passwords[email.toLowerCase()] !== password) {
+      if (!AuthService.checkPassword(email, password)) {
         // Track failed login attempt
-        const loginAttempts = localStorage.getItem('capitalengine_login_attempts');
-        const attempts: { [email: string]: number } = loginAttempts ? JSON.parse(loginAttempts) : {};
-        attempts[email.toLowerCase()] = (attempts[email.toLowerCase()] || 0) + 1;
-        localStorage.setItem('capitalengine_login_attempts', JSON.stringify(attempts));
-        
+        AuthStorage.incrementLoginAttempts(email);
         setIsLoading(false);
         return { success: false, message: "Incorrect password. Please try again." };
       }
       
       // Clear failed login attempts on successful login
-      const loginAttempts = localStorage.getItem('capitalengine_login_attempts');
-      if (loginAttempts) {
-        const attempts: { [email: string]: number } = JSON.parse(loginAttempts);
-        delete attempts[email.toLowerCase()];
-        localStorage.setItem('capitalengine_login_attempts', JSON.stringify(attempts));
-      }
+      AuthStorage.clearLoginAttempts(email);
       
       // Update last login date
-      const updatedUser = {
-        ...foundUser,
-        lastLoginDate: new Date().toISOString()
-      };
-      
-      // Update user in registered users list
-      const updatedUsers = users.map(u => u.email.toLowerCase() === email.toLowerCase() ? updatedUser : u);
-      localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
+      const updatedUser = AuthService.updateUserLastLogin(foundUser);
       
       setUser(updatedUser);
-      localStorage.setItem('capitalengine_user', JSON.stringify(updatedUser));
-      localStorage.setItem('capitalengine_balance', (updatedUser.balance || 0).toString());
       setIsLoading(false);
       return { success: true, message: "Login successful!" };
     } catch (error) {
@@ -118,101 +67,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
+      if (!AuthService.validateEmail(email)) {
         setIsLoading(false);
         return { success: false, message: "Please enter a valid email address." };
       }
       
       // Validate password strength
-      if (password.length < 6) {
+      if (!AuthService.validatePassword(password)) {
         setIsLoading(false);
         return { success: false, message: "Password must be at least 6 characters long." };
       }
       
       // Check if email already exists
-      const existingUsers = localStorage.getItem('capitalengine_registered_users');
-      const users: User[] = existingUsers ? JSON.parse(existingUsers) : [];
-      
-      const emailExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
-      if (emailExists) {
+      const existingUser = AuthService.findUserByEmail(email);
+      if (existingUser) {
         setIsLoading(false);
         return { success: false, message: "This email address is already registered. Please use a different email or try logging in." };
       }
       
-      // Create new user with $0 balance (always start with $0)
-      const userData: User = {
-        id: Math.random().toString(36).substr(2, 9),
-        email: email.toLowerCase(),
-        name,
-        balance: 0,
-        registrationDate: new Date().toISOString(),
-        lastLoginDate: new Date().toISOString()
-      };
+      // Create new user with $0 balance
+      const userData = AuthService.createUser(name, email, password);
       
-      // Add user to registered users list
-      const updatedUsers = [...users, userData];
-      
-      // Update storage immediately and force sync
-      localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
-      
-      // Store password separately
-      const storedPasswords = localStorage.getItem('capitalengine_passwords');
-      const passwords: { [email: string]: string } = storedPasswords ? JSON.parse(storedPasswords) : {};
-      passwords[email.toLowerCase()] = password;
-      localStorage.setItem('capitalengine_passwords', JSON.stringify(passwords));
+      // Register user and trigger events
+      AuthService.registerUser(userData, password);
       
       // Set current user
       setUser(userData);
-      localStorage.setItem('capitalengine_user', JSON.stringify(userData));
-      localStorage.setItem('capitalengine_balance', '0');
-      
-      console.log('🟢 NEW USER REGISTERED:', userData);
-      console.log('🟢 UPDATED USERS LIST:', updatedUsers);
-      console.log('🟢 STORAGE UPDATED - TRIGGERING ADMIN SYNC');
-      
-      // Enhanced event dispatching system for admin panel sync
-      const triggerAdminSync = () => {
-        // Dispatch custom events with detailed information
-        const registrationEvent = new CustomEvent('userRegistered', { 
-          detail: { 
-            user: userData, 
-            allUsers: updatedUsers,
-            timestamp: new Date().toISOString(),
-            action: 'NEW_USER_REGISTERED'
-          } 
-        });
-        
-        const storageEvent = new CustomEvent('adminDataUpdate', {
-          detail: {
-            type: 'USER_REGISTRATION',
-            user: userData,
-            allUsers: updatedUsers,
-            timestamp: new Date().toISOString()
-          }
-        });
-        
-        // Dispatch both events
-        window.dispatchEvent(registrationEvent);
-        window.dispatchEvent(storageEvent);
-        
-        // Force storage event for cross-tab communication
-        window.dispatchEvent(new StorageEvent('storage', {
-          key: 'capitalengine_registered_users',
-          newValue: JSON.stringify(updatedUsers),
-          oldValue: JSON.stringify(users)
-        }));
-        
-        console.log('🔥 ADMIN SYNC EVENTS DISPATCHED');
-      };
-      
-      // Dispatch events multiple times with intervals for reliability
-      triggerAdminSync();
-      setTimeout(triggerAdminSync, 100);
-      setTimeout(triggerAdminSync, 300);
-      setTimeout(triggerAdminSync, 500);
-      setTimeout(triggerAdminSync, 1000);
-      setTimeout(triggerAdminSync, 2000);
       
       setIsLoading(false);
       return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };
@@ -225,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('capitalengine_user');
+    AuthStorage.clearCurrentUser();
   };
 
   const resetPassword = async (email: string): Promise<boolean> => {
