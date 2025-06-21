@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface User {
@@ -152,7 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Add user to registered users list
       const updatedUsers = [...users, userData];
       
-      // Update storage immediately
+      // Update storage immediately and force sync
       localStorage.setItem('capitalengine_registered_users', JSON.stringify(updatedUsers));
       
       // Store password separately
@@ -166,29 +167,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('capitalengine_user', JSON.stringify(userData));
       localStorage.setItem('capitalengine_balance', '0');
       
-      console.log('New user registered:', userData);
-      console.log('Updated users list:', updatedUsers);
+      console.log('🟢 NEW USER REGISTERED:', userData);
+      console.log('🟢 UPDATED USERS LIST:', updatedUsers);
+      console.log('🟢 STORAGE UPDATED - TRIGGERING ADMIN SYNC');
       
-      // Force immediate dispatch of registration events with multiple attempts
-      const dispatchRegistrationEvent = () => {
+      // Enhanced event dispatching system for admin panel sync
+      const triggerAdminSync = () => {
+        // Dispatch custom events with detailed information
         const registrationEvent = new CustomEvent('userRegistered', { 
           detail: { 
             user: userData, 
             allUsers: updatedUsers,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            action: 'NEW_USER_REGISTERED'
           } 
         });
+        
+        const storageEvent = new CustomEvent('adminDataUpdate', {
+          detail: {
+            type: 'USER_REGISTRATION',
+            user: userData,
+            allUsers: updatedUsers,
+            timestamp: new Date().toISOString()
+          }
+        });
+        
+        // Dispatch both events
         window.dispatchEvent(registrationEvent);
-        console.log('Registration event dispatched:', registrationEvent.detail);
+        window.dispatchEvent(storageEvent);
+        
+        // Force storage event for cross-tab communication
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'capitalengine_registered_users',
+          newValue: JSON.stringify(updatedUsers),
+          oldValue: JSON.stringify(users)
+        }));
+        
+        console.log('🔥 ADMIN SYNC EVENTS DISPATCHED');
       };
       
-      // Dispatch immediately and with delays
-      dispatchRegistrationEvent();
-      setTimeout(dispatchRegistrationEvent, 50);
-      setTimeout(dispatchRegistrationEvent, 100);
-      setTimeout(dispatchRegistrationEvent, 250);
-      setTimeout(dispatchRegistrationEvent, 500);
-      setTimeout(dispatchRegistrationEvent, 1000);
+      // Dispatch events multiple times with intervals for reliability
+      triggerAdminSync();
+      setTimeout(triggerAdminSync, 100);
+      setTimeout(triggerAdminSync, 300);
+      setTimeout(triggerAdminSync, 500);
+      setTimeout(triggerAdminSync, 1000);
+      setTimeout(triggerAdminSync, 2000);
       
       setIsLoading(false);
       return { success: true, message: "Account created successfully! Welcome to CapitalEngine." };

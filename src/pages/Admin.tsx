@@ -42,71 +42,94 @@ const Admin = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
+      console.log('🟢 ADMIN PANEL INITIALIZING - Setting up real-time sync');
+      
       // Initial load
       loadUsers();
       loadTransactions();
       
-      // Set up continuous polling for real-time updates
-      const interval = setInterval(() => {
+      // Enhanced real-time polling - check every 500ms for immediate updates
+      const rapidPolling = setInterval(() => {
         loadUsers();
         loadTransactions();
-      }, 1000); // Check every second for immediate updates
+      }, 500);
       
-      // Enhanced event listeners with better error handling
-      const handleUserRegistration = (event: CustomEvent) => {
-        console.log('Admin panel detected new user registration event:', event.detail);
+      // Enhanced event listeners for better real-time sync
+      const handleUserRegistration = (event: any) => {
+        console.log('🔥 ADMIN DETECTED NEW USER REGISTRATION:', event.detail);
         
-        // Force immediate reload of users
-        setTimeout(() => {
-          loadUsers();
-          console.log('Users reloaded after registration event');
-        }, 100);
-        
-        // Show toast notification
+        // Show immediate toast notification
         if (event.detail?.user) {
           toast({
-            title: "New User Registered! 🎉",
-            description: `${event.detail.user.name} (${event.detail.user.email}) just joined!`,
+            title: "🎉 NEW USER REGISTERED!",
+            description: `${event.detail.user.name} (${event.detail.user.email}) just joined with $0 balance!`,
+          });
+        }
+        
+        // Force immediate reload
+        setTimeout(() => {
+          loadUsers();
+          console.log('✅ Users reloaded after registration');
+        }, 50);
+      };
+
+      const handleAdminDataUpdate = (event: any) => {
+        console.log('🔥 ADMIN DATA UPDATE EVENT:', event.detail);
+        
+        if (event.detail?.type === 'USER_REGISTRATION') {
+          loadUsers();
+          toast({
+            title: "📊 Admin Data Updated",
+            description: "New user data synchronized!",
           });
         }
       };
 
-      const handleNewTransaction = (event: CustomEvent) => {
-        console.log('Admin panel detected new transaction:', event.detail);
+      const handleNewTransaction = (event: any) => {
+        console.log('🔥 ADMIN DETECTED NEW TRANSACTION:', event.detail);
         setTimeout(() => {
           loadTransactions();
-        }, 100);
+        }, 50);
         
         if (event.detail?.transaction) {
           toast({
-            title: "New Transaction 💰",
+            title: "💰 New Transaction",
             description: `New ${event.detail.transaction.type} of $${event.detail.transaction.amount}`,
           });
         }
       };
       
-      // Add event listeners
-      window.addEventListener('userRegistered', handleUserRegistration as EventListener);
-      window.addEventListener('newTransaction', handleNewTransaction as EventListener);
-      
-      // Also listen for storage changes (fallback method)
-      const handleStorageChange = (e: StorageEvent) => {
+      // Enhanced storage change detection
+      const handleStorageChange = (e: any) => {
+        console.log('🔥 STORAGE CHANGE DETECTED:', e.key);
         if (e.key === 'capitalengine_registered_users') {
-          console.log('Storage change detected for registered users');
+          console.log('📊 Users storage changed - reloading');
           loadUsers();
         }
         if (e.key === 'capitalengine_all_transactions') {
-          console.log('Storage change detected for transactions');
+          console.log('💰 Transaction storage changed - reloading');
           loadTransactions();
         }
       };
       
+      // Add all event listeners
+      window.addEventListener('userRegistered', handleUserRegistration);
+      window.addEventListener('adminDataUpdate', handleAdminDataUpdate);
+      window.addEventListener('newTransaction', handleNewTransaction);
       window.addEventListener('storage', handleStorageChange);
       
+      // Force check for existing data on mount
+      setTimeout(() => {
+        console.log('🔍 FORCE CHECKING FOR EXISTING DATA');
+        loadUsers();
+        loadTransactions();
+      }, 100);
+      
       return () => {
-        clearInterval(interval);
-        window.removeEventListener('userRegistered', handleUserRegistration as EventListener);
-        window.removeEventListener('newTransaction', handleNewTransaction as EventListener);
+        clearInterval(rapidPolling);
+        window.removeEventListener('userRegistered', handleUserRegistration);
+        window.removeEventListener('adminDataUpdate', handleAdminDataUpdate);
+        window.removeEventListener('newTransaction', handleNewTransaction);
         window.removeEventListener('storage', handleStorageChange);
       };
     }
@@ -115,11 +138,11 @@ const Admin = () => {
   const loadUsers = () => {
     try {
       const registeredUsers = localStorage.getItem('capitalengine_registered_users');
-      console.log('Loading users from localStorage:', registeredUsers);
+      console.log('📊 LOADING USERS FROM STORAGE:', registeredUsers);
       
       if (registeredUsers) {
         const parsedUsers = JSON.parse(registeredUsers);
-        console.log('Parsed users:', parsedUsers);
+        console.log('✅ PARSED USERS:', parsedUsers);
         
         const formattedUsers: User[] = parsedUsers.map((user: any) => ({
           id: user.id,
@@ -131,14 +154,14 @@ const Admin = () => {
           loginAttempts: user.loginAttempts || 0
         }));
         
-        console.log('Setting users in admin:', formattedUsers);
+        console.log('🟢 SETTING USERS IN ADMIN PANEL:', formattedUsers);
         setUsers(formattedUsers);
       } else {
-        console.log('No registered users found, setting empty array');
+        console.log('❌ NO REGISTERED USERS FOUND');
         setUsers([]);
       }
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('❌ ERROR LOADING USERS:', error);
       setUsers([]);
     }
   };
@@ -148,13 +171,13 @@ const Admin = () => {
       const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
       if (globalTransactions) {
         const parsedTransactions = JSON.parse(globalTransactions);
-        console.log('Loaded transactions:', parsedTransactions);
+        console.log('💰 Loaded transactions:', parsedTransactions);
         setTransactions(parsedTransactions);
       } else {
         setTransactions([]);
       }
     } catch (error) {
-      console.error('Error loading transactions:', error);
+      console.error('❌ Error loading transactions:', error);
       setTransactions([]);
     }
   };
@@ -231,6 +254,8 @@ const Admin = () => {
   };
 
   const approveTransaction = (transactionId: string, status: 'completed' | 'failed') => {
+    console.log(`🔥 APPROVING TRANSACTION ${transactionId} as ${status}`);
+    
     const updatedTransactions = transactions.map(transaction =>
       transaction.id === transactionId ? { ...transaction, status } : transaction
     );
@@ -238,20 +263,12 @@ const Admin = () => {
     setTransactions(updatedTransactions);
     localStorage.setItem('capitalengine_all_transactions', JSON.stringify(updatedTransactions));
 
-    // Update user transactions
-    const userTransactions = localStorage.getItem('capitalengine_transactions');
-    if (userTransactions) {
-      const userTxns = JSON.parse(userTransactions);
-      const updatedUserTxns = userTxns.map((transaction: Transaction) =>
-        transaction.id === transactionId ? { ...transaction, status } : transaction
-      );
-      localStorage.setItem('capitalengine_transactions', JSON.stringify(updatedUserTxns));
-    }
-
     // If deposit is completed, update user balance
     if (status === 'completed') {
       const transaction = transactions.find(t => t.id === transactionId);
       if (transaction && transaction.type === 'deposit' && transaction.userId) {
+        console.log(`💰 DEPOSIT APPROVED - Adding $${transaction.amount} to user balance`);
+        
         const updatedUsers = users.map(user => 
           user.id === transaction.userId 
             ? { ...user, balance: user.balance + transaction.amount }
@@ -280,7 +297,7 @@ const Admin = () => {
     }
 
     toast({
-      title: status === 'completed' ? "Transaction Approved" : "Transaction Rejected",
+      title: status === 'completed' ? "✅ Transaction Approved" : "❌ Transaction Rejected",
       description: `Deposit has been marked as ${status}.`,
     });
   };
@@ -350,22 +367,31 @@ const Admin = () => {
               CapitalEngine Admin Panel
             </h1>
             <p className="text-slate-400">
-              Real-time user management & deposit approval
+              🔴 LIVE: Real-time user management & deposit approval
             </p>
             <p className="text-slate-300 text-sm mt-1">
-              Total Users: {users.length} | Pending Deposits: {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} | 🔴 LIVE (Updates every second)
+              Total Users: {users.length} | Pending Deposits: {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} | ⚡ Auto-sync every 500ms
             </p>
           </div>
           <div className="flex gap-4">
             <Button 
-              onClick={clearAllData}
+              onClick={() => {
+                localStorage.clear();
+                setUsers([]);
+                setTransactions([]);
+                toast({ title: "🗑️ All Data Cleared", description: "Database wiped clean!" });
+              }}
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
             >
               🗑️ Clear All Data
             </Button>
             <Button 
-              onClick={refreshData}
+              onClick={() => {
+                loadUsers();
+                loadTransactions();
+                toast({ title: "🔄 Data Refreshed", description: "All data reloaded!" });
+              }}
               variant="outline"
               className="border-slate-600 text-slate-300 hover:bg-slate-700"
             >
@@ -495,7 +521,7 @@ const Admin = () => {
             <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
               <CardHeader>
                 <CardTitle className="text-white">
-                  🔴 LIVE: All Registered Users
+                  🔴 LIVE: All Registered Users (Updates every 500ms)
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -504,7 +530,7 @@ const Admin = () => {
                     <div className="text-6xl mb-4">👥</div>
                     <p className="text-xl mb-2">No users registered yet.</p>
                     <p className="text-sm">Users will appear here automatically when they register on the main website.</p>
-                    <p className="text-xs mt-2 text-slate-500">🔴 Live sync active - Updates every second</p>
+                    <p className="text-xs mt-2 text-slate-500">🔴 Live sync active - Updates every 500ms</p>
                   </div>
                 ) : (
                   <Table>
@@ -523,7 +549,7 @@ const Admin = () => {
                           <TableCell className="text-white font-medium">{user.name}</TableCell>
                           <TableCell className="text-slate-300">{user.email}</TableCell>
                           <TableCell className="text-emerald-400 font-bold">
-                            {formatAmount(user.balance)}
+                            ${user.balance.toFixed(2)}
                           </TableCell>
                           <TableCell className="text-slate-400">
                             {new Date(user.registrationDate).toLocaleDateString()}
@@ -538,7 +564,7 @@ const Admin = () => {
                               }}
                               className="border-slate-600 text-slate-300 hover:bg-slate-700"
                             >
-                              Edit Balance
+                              💰 Fund User
                             </Button>
                           </TableCell>
                         </TableRow>
