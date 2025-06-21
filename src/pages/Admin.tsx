@@ -42,87 +42,119 @@ const Admin = () => {
 
   useEffect(() => {
     if (isAuthenticated) {
+      // Initial load
       loadUsers();
       loadTransactions();
       
-      // Set up interval to refresh data every 2 seconds for better real-time sync
+      // Set up continuous polling for real-time updates
       const interval = setInterval(() => {
         loadUsers();
         loadTransactions();
-      }, 2000);
+      }, 1000); // Check every second for immediate updates
       
-      // Listen for new user registrations from the main website
+      // Enhanced event listeners with better error handling
       const handleUserRegistration = (event: CustomEvent) => {
-        console.log('Admin panel detected new user registration:', event.detail);
+        console.log('Admin panel detected new user registration event:', event.detail);
+        
+        // Force immediate reload of users
         setTimeout(() => {
-          loadUsers(); // Refresh user list after a small delay
-        }, 500);
-        toast({
-          title: "New User Registered",
-          description: `${event.detail.user.name} (${event.detail.user.email}) just registered!`,
-        });
+          loadUsers();
+          console.log('Users reloaded after registration event');
+        }, 100);
+        
+        // Show toast notification
+        if (event.detail?.user) {
+          toast({
+            title: "New User Registered! 🎉",
+            description: `${event.detail.user.name} (${event.detail.user.email}) just joined!`,
+          });
+        }
       };
 
-      // Listen for new transactions
       const handleNewTransaction = (event: CustomEvent) => {
         console.log('Admin panel detected new transaction:', event.detail);
         setTimeout(() => {
           loadTransactions();
-        }, 500);
-        toast({
-          title: "New Transaction",
-          description: `New ${event.detail.transaction.type} transaction received`,
-        });
+        }, 100);
+        
+        if (event.detail?.transaction) {
+          toast({
+            title: "New Transaction 💰",
+            description: `New ${event.detail.transaction.type} of $${event.detail.transaction.amount}`,
+          });
+        }
       };
       
+      // Add event listeners
       window.addEventListener('userRegistered', handleUserRegistration as EventListener);
       window.addEventListener('newTransaction', handleNewTransaction as EventListener);
+      
+      // Also listen for storage changes (fallback method)
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === 'capitalengine_registered_users') {
+          console.log('Storage change detected for registered users');
+          loadUsers();
+        }
+        if (e.key === 'capitalengine_all_transactions') {
+          console.log('Storage change detected for transactions');
+          loadTransactions();
+        }
+      };
+      
+      window.addEventListener('storage', handleStorageChange);
       
       return () => {
         clearInterval(interval);
         window.removeEventListener('userRegistered', handleUserRegistration as EventListener);
         window.removeEventListener('newTransaction', handleNewTransaction as EventListener);
+        window.removeEventListener('storage', handleStorageChange);
       };
     }
   }, [isAuthenticated, toast]);
 
   const loadUsers = () => {
-    console.log('Admin panel loading users...');
-    
-    // Load from registered users (primary source)
-    const registeredUsers = localStorage.getItem('capitalengine_registered_users');
-    
-    if (registeredUsers) {
-      const regUsers = JSON.parse(registeredUsers);
-      console.log('Found registered users:', regUsers);
+    try {
+      const registeredUsers = localStorage.getItem('capitalengine_registered_users');
+      console.log('Loading users from localStorage:', registeredUsers);
       
-      const formattedUsers: User[] = regUsers.map((user: any) => ({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        balance: user.balance || 0,
-        registrationDate: user.registrationDate || new Date().toISOString(),
-        lastLoginDate: user.lastLoginDate,
-        loginAttempts: user.loginAttempts || 0
-      }));
-      
-      setUsers(formattedUsers);
-      console.log('Admin panel updated with users:', formattedUsers);
-    } else {
-      console.log('No registered users found');
+      if (registeredUsers) {
+        const parsedUsers = JSON.parse(registeredUsers);
+        console.log('Parsed users:', parsedUsers);
+        
+        const formattedUsers: User[] = parsedUsers.map((user: any) => ({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          balance: user.balance || 0,
+          registrationDate: user.registrationDate || new Date().toISOString(),
+          lastLoginDate: user.lastLoginDate,
+          loginAttempts: user.loginAttempts || 0
+        }));
+        
+        console.log('Setting users in admin:', formattedUsers);
+        setUsers(formattedUsers);
+      } else {
+        console.log('No registered users found, setting empty array');
+        setUsers([]);
+      }
+    } catch (error) {
+      console.error('Error loading users:', error);
       setUsers([]);
     }
   };
 
   const loadTransactions = () => {
-    console.log('Admin panel loading transactions...');
-    const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
-    if (globalTransactions) {
-      const allTransactions = JSON.parse(globalTransactions);
-      console.log('Found transactions:', allTransactions);
-      setTransactions(allTransactions);
-    } else {
-      console.log('No transactions found');
+    try {
+      const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
+      if (globalTransactions) {
+        const parsedTransactions = JSON.parse(globalTransactions);
+        console.log('Loaded transactions:', parsedTransactions);
+        setTransactions(parsedTransactions);
+      } else {
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error('Error loading transactions:', error);
       setTransactions([]);
     }
   };
@@ -263,24 +295,32 @@ const Admin = () => {
   };
 
   const refreshData = () => {
+    console.log('Manual refresh triggered');
     loadUsers();
     loadTransactions();
     toast({
-      title: "Refreshed",
-      description: "All data has been refreshed from the main website.",
+      title: "Data Refreshed! 🔄",
+      description: "All data has been reloaded from storage.",
     });
   };
 
   const clearAllData = () => {
     if (window.confirm('Are you sure you want to delete ALL user data? This action cannot be undone.')) {
       // Clear all localStorage data
-      localStorage.removeItem('capitalengine_registered_users');
-      localStorage.removeItem('capitalengine_passwords');
-      localStorage.removeItem('capitalengine_user');
-      localStorage.removeItem('capitalengine_balance');
-      localStorage.removeItem('capitalengine_transactions');
-      localStorage.removeItem('capitalengine_all_transactions');
-      localStorage.removeItem('capitalengine_login_attempts');
+      const keysToRemove = [
+        'capitalengine_registered_users',
+        'capitalengine_passwords',
+        'capitalengine_user',
+        'capitalengine_balance',
+        'capitalengine_transactions',
+        'capitalengine_all_transactions',
+        'capitalengine_login_attempts'
+      ];
+      
+      keysToRemove.forEach(key => {
+        localStorage.removeItem(key);
+        console.log(`Removed ${key} from localStorage`);
+      });
       
       // Clear state
       setUsers([]);
@@ -289,8 +329,8 @@ const Admin = () => {
       setBalanceAmount('');
       
       toast({
-        title: "All Data Cleared",
-        description: "All user data has been deleted. You can now test fresh registrations.",
+        title: "All Data Cleared! 🗑️",
+        description: "Database wiped clean. Ready for fresh testing!",
       });
       
       console.log('All user data cleared from localStorage');
@@ -313,7 +353,7 @@ const Admin = () => {
               Real-time user management & deposit approval
             </p>
             <p className="text-slate-300 text-sm mt-1">
-              Total Users: {users.length} | Pending Deposits: {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} | Live sync every 2 seconds
+              Total Users: {users.length} | Pending Deposits: {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length} | 🔴 LIVE (Updates every second)
             </p>
           </div>
           <div className="flex gap-4">
@@ -322,14 +362,14 @@ const Admin = () => {
               variant="destructive"
               className="bg-red-600 hover:bg-red-700"
             >
-              Clear All Data
+              🗑️ Clear All Data
             </Button>
             <Button 
               onClick={refreshData}
               variant="outline"
               className="border-slate-600 text-slate-300 hover:bg-slate-700"
             >
-              Refresh Data
+              🔄 Refresh Data
             </Button>
             <Button 
               onClick={() => setIsAuthenticated(false)}
@@ -349,14 +389,14 @@ const Admin = () => {
               variant={activeTab === 'users' ? 'default' : 'outline'}
               className={activeTab === 'users' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-600 text-slate-300 hover:bg-slate-700'}
             >
-              User Management
+              👥 User Management ({users.length})
             </Button>
             <Button
               onClick={() => setActiveTab('deposits')}
               variant={activeTab === 'deposits' ? 'default' : 'outline'}
               className={activeTab === 'deposits' ? 'bg-blue-600 hover:bg-blue-700' : 'border-slate-600 text-slate-300 hover:bg-slate-700'}
             >
-              Deposit Approval ({transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length})
+              💰 Deposit Approval ({transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length})
             </Button>
           </div>
         </div>
@@ -420,29 +460,29 @@ const Admin = () => {
               {/* User Statistics */}
               <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
                 <CardHeader>
-                  <CardTitle className="text-white">System Statistics</CardTitle>
+                  <CardTitle className="text-white">📊 Live Statistics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                      <span className="text-slate-300">Total Registered Users</span>
-                      <span className="text-white font-bold">{users.length}</span>
+                      <span className="text-slate-300">👥 Total Users</span>
+                      <span className="text-white font-bold text-xl">{users.length}</span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                      <span className="text-slate-300">Total Balance Pool</span>
-                      <span className="text-emerald-400 font-bold">
+                      <span className="text-slate-300">💰 Total Balance Pool</span>
+                      <span className="text-emerald-400 font-bold text-xl">
                         {formatAmount(users.reduce((sum, user) => sum + user.balance, 0))}
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                      <span className="text-slate-300">Pending Deposits</span>
-                      <span className="text-yellow-400 font-bold">
+                      <span className="text-slate-300">⏳ Pending Deposits</span>
+                      <span className="text-yellow-400 font-bold text-xl">
                         {transactions.filter(t => t.type === 'deposit' && t.status === 'pending').length}
                       </span>
                     </div>
                     <div className="flex justify-between items-center p-3 bg-slate-900/50 rounded-lg">
-                      <span className="text-slate-300">Total Transactions</span>
-                      <span className="text-purple-400 font-bold">
+                      <span className="text-slate-300">📊 Total Transactions</span>
+                      <span className="text-purple-400 font-bold text-xl">
                         {transactions.length}
                       </span>
                     </div>
@@ -455,14 +495,16 @@ const Admin = () => {
             <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm mt-8">
               <CardHeader>
                 <CardTitle className="text-white">
-                  All Registered Users - Live Data from Website
+                  🔴 LIVE: All Registered Users
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {users.length === 0 ? (
                   <div className="text-center text-slate-400 py-8">
-                    <p>No users registered yet.</p>
-                    <p className="text-sm mt-2">Users will appear here automatically when they register on the website.</p>
+                    <div className="text-6xl mb-4">👥</div>
+                    <p className="text-xl mb-2">No users registered yet.</p>
+                    <p className="text-sm">Users will appear here automatically when they register on the main website.</p>
+                    <p className="text-xs mt-2 text-slate-500">🔴 Live sync active - Updates every second</p>
                   </div>
                 ) : (
                   <Table>
@@ -478,9 +520,9 @@ const Admin = () => {
                     <TableBody>
                       {users.map((user) => (
                         <TableRow key={user.id}>
-                          <TableCell className="text-white">{user.name}</TableCell>
+                          <TableCell className="text-white font-medium">{user.name}</TableCell>
                           <TableCell className="text-slate-300">{user.email}</TableCell>
-                          <TableCell className="text-emerald-400 font-medium">
+                          <TableCell className="text-emerald-400 font-bold">
                             {formatAmount(user.balance)}
                           </TableCell>
                           <TableCell className="text-slate-400">
@@ -513,14 +555,15 @@ const Admin = () => {
           <Card className="bg-slate-800/80 border-slate-700 backdrop-blur-sm">
             <CardHeader>
               <CardTitle className="text-white">
-                Deposit Approval - Pending Transactions
+                💰 Deposit Approval - Live Transactions
               </CardTitle>
             </CardHeader>
             <CardContent>
               {transactions.filter(t => t.type === 'deposit').length === 0 ? (
                 <div className="text-center text-slate-400 py-8">
-                  <p>No deposit transactions found.</p>
-                  <p className="text-sm mt-2">Deposits will appear here when users make them.</p>
+                  <div className="text-6xl mb-4">💳</div>
+                  <p className="text-xl mb-2">No deposit transactions found.</p>
+                  <p className="text-sm">Deposits will appear here when users make them.</p>
                 </div>
               ) : (
                 <Table>
@@ -577,7 +620,7 @@ const Admin = () => {
                                   onClick={() => approveTransaction(transaction.id, 'completed')}
                                   className="border-green-600 text-green-400 hover:bg-green-900/20"
                                 >
-                                  Approve
+                                  ✅ Approve
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -585,7 +628,7 @@ const Admin = () => {
                                   onClick={() => approveTransaction(transaction.id, 'failed')}
                                   className="border-red-600 text-red-400 hover:bg-red-900/20"
                                 >
-                                  Reject
+                                  ❌ Reject
                                 </Button>
                               </div>
                             )}
