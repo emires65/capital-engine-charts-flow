@@ -34,12 +34,18 @@ const Header = () => {
                 <Link to="/investment" className="text-slate-300 hover:text-white transition-colors">
                   Investment
                 </Link>
+                <Link to="/admin" className="text-slate-300 hover:text-white transition-colors">
+                  Admin
+                </Link>
                 <Button onClick={handleLogout} variant="outline" size="sm">
                   Logout
                 </Button>
               </>
             ) : (
               <div className="flex items-center space-x-4">
+                <Link to="/admin" className="text-slate-300 hover:text-white transition-colors">
+                  Admin
+                </Link>
                 <Link to="/login">
                   <Button variant="ghost" size="sm" className="text-slate-300 hover:text-white">
                     Login

@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface Transaction {
@@ -29,16 +30,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [balance, setBalance] = useState(0);
 
   useEffect(() => {
-    const savedTransactions = localStorage.getItem('capitalengine_transactions');
-    const savedBalance = localStorage.getItem('capitalengine_balance');
-    
-    if (savedTransactions) {
-      setTransactions(JSON.parse(savedTransactions));
-    }
-    
-    if (savedBalance) {
-      setBalance(parseFloat(savedBalance));
-    }
+    loadUserTransactions();
+    loadUserBalance();
 
     // Listen for balance updates from admin panel
     const handleBalanceUpdate = (event: CustomEvent) => {
@@ -57,6 +50,36 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       window.removeEventListener('balanceUpdated', handleBalanceUpdate as EventListener);
     };
   }, []);
+
+  const loadUserTransactions = () => {
+    const currentUser = localStorage.getItem('capitalengine_user');
+    if (!currentUser) {
+      setTransactions([]);
+      return;
+    }
+
+    const userData = JSON.parse(currentUser);
+    const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
+    
+    if (globalTransactions) {
+      const allTransactions: Transaction[] = JSON.parse(globalTransactions);
+      // Filter transactions to only show current user's transactions
+      const userTransactions = allTransactions.filter(transaction => 
+        transaction.userId === userData.id
+      );
+      setTransactions(userTransactions);
+    } else {
+      setTransactions([]);
+    }
+  };
+
+  const loadUserBalance = () => {
+    const currentUser = localStorage.getItem('capitalengine_user');
+    if (currentUser) {
+      const userData = JSON.parse(currentUser);
+      setBalance(userData.balance || 0);
+    }
+  };
 
   const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
     const currentUser = localStorage.getItem('capitalengine_user');
@@ -78,9 +101,9 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       date: new Date().toISOString(),
     };
     
+    // Add to user's transaction list
     const updatedTransactions = [newTransaction, ...transactions];
     setTransactions(updatedTransactions);
-    localStorage.setItem('capitalengine_transactions', JSON.stringify(updatedTransactions));
     
     // Store globally for admin access
     const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
@@ -106,11 +129,11 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const updateTransactionStatus = (transactionId: string, status: 'completed' | 'failed') => {
+    // Update user's transactions
     const updatedTransactions = transactions.map(transaction =>
       transaction.id === transactionId ? { ...transaction, status } : transaction
     );
     setTransactions(updatedTransactions);
-    localStorage.setItem('capitalengine_transactions', JSON.stringify(updatedTransactions));
 
     // Update global transactions
     const globalTransactions = localStorage.getItem('capitalengine_all_transactions');
@@ -121,11 +144,35 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       );
       localStorage.setItem('capitalengine_all_transactions', JSON.stringify(updatedAllTransactions));
     }
+
+    // If it's a completed deposit, update user balance
+    if (status === 'completed') {
+      const transaction = updatedTransactions.find(t => t.id === transactionId);
+      if (transaction && transaction.type === 'deposit') {
+        const newBalance = balance + transaction.amount;
+        setBalance(newBalance);
+        
+        // Update user data
+        const currentUser = localStorage.getItem('capitalengine_user');
+        if (currentUser) {
+          const userData = JSON.parse(currentUser);
+          userData.balance = newBalance;
+          localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+        }
+      }
+    }
   };
 
   const updateBalance = (newBalance: number) => {
     setBalance(newBalance);
-    localStorage.setItem('capitalengine_balance', newBalance.toString());
+    
+    // Update user data
+    const currentUser = localStorage.getItem('capitalengine_user');
+    if (currentUser) {
+      const userData = JSON.parse(currentUser);
+      userData.balance = newBalance;
+      localStorage.setItem('capitalengine_user', JSON.stringify(userData));
+    }
   };
 
   const getAllTransactions = (): Transaction[] => {

@@ -1,7 +1,7 @@
 
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu, X, Home, LayoutDashboard, Wallet, LogOut } from 'lucide-react';
+import { Menu, X, Home, LayoutDashboard, Wallet, LogOut, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -25,11 +25,8 @@ const MobileNavigation = () => {
     { label: 'Home', path: '/', icon: Home },
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Investment', path: '/investment', icon: Wallet },
+    { label: 'Admin', path: '/admin', icon: Settings },
   ];
-
-  if (!user) {
-    return null;
-  }
 
   return (
     <div className="md:hidden">
@@ -66,42 +63,44 @@ const MobileNavigation = () => {
                 </Link>
               ))}
               
-              <div className="pt-4 border-t border-slate-700">
-                <Link
-                  to="/dashboard"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-2"
-                >
-                  <Wallet className="h-5 w-5 text-green-400" />
-                  <span className="text-white font-medium">Deposit</span>
-                </Link>
-                
-                <Link
-                  to="/dashboard"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-2"
-                >
-                  <Wallet className="h-5 w-5 text-red-400" />
-                  <span className="text-white font-medium">Withdraw</span>
-                </Link>
-                
-                <Link
-                  to="/dashboard"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-4"
-                >
-                  <span className="text-blue-400 text-sm">💬</span>
-                  <span className="text-white font-medium">Customer Support</span>
-                </Link>
-                
-                <Button
-                  onClick={handleLogout}
-                  className="w-full flex items-center justify-center space-x-3 p-3 bg-red-600 hover:bg-red-700"
-                >
-                  <LogOut className="h-5 w-5" />
-                  <span>Logout</span>
-                </Button>
-              </div>
+              {user && (
+                <div className="pt-4 border-t border-slate-700">
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-2"
+                  >
+                    <Wallet className="h-5 w-5 text-green-400" />
+                    <span className="text-white font-medium">Deposit</span>
+                  </Link>
+                  
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-2"
+                  >
+                    <Wallet className="h-5 w-5 text-red-400" />
+                    <span className="text-white font-medium">Withdraw</span>
+                  </Link>
+                  
+                  <Link
+                    to="/dashboard"
+                    onClick={() => setOpen(false)}
+                    className="flex items-center space-x-3 p-3 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors mb-4"
+                  >
+                    <span className="text-blue-400 text-sm">💬</span>
+                    <span className="text-white font-medium">Customer Support</span>
+                  </Link>
+                  
+                  <Button
+                    onClick={handleLogout}
+                    className="w-full flex items-center justify-center space-x-3 p-3 bg-red-600 hover:bg-red-700"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span>Logout</span>
+                  </Button>
+                </div>
+              )}
             </nav>
           </div>
         </DrawerContent>
