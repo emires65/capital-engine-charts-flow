@@ -3,7 +3,7 @@ import React from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import UserSummaryCard from '@/components/UserSummaryCard';
 import CryptoChartWidget from '@/components/CryptoChartWidget';
-import { RealCryptoChart } from '@/components/RealCryptoChart';
+import RealCryptoChart from '@/components/RealCryptoChart';
 
 const Investment = () => {
   // Mock data - in real app, this would come from your backend

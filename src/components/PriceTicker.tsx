@@ -67,15 +67,6 @@ const PriceTicker = () => {
           </div>
         ))}
       </div>
-      <style jsx>{`
-        @keyframes scroll {
-          0% { transform: translateX(100%); }
-          100% { transform: translateX(-100%); }
-        }
-        .animate-scroll {
-          animation: scroll 60s linear infinite;
-        }
-      `}</style>
     </div>
   );
 };
