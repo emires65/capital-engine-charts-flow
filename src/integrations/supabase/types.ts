@@ -54,6 +54,39 @@ export type Database = {
           },
         ]
       }
+      investment_plans: {
+        Row: {
+          created_at: string | null
+          daily_profit_percentage: number
+          description: string | null
+          duration_days: number
+          id: string
+          is_active: boolean | null
+          minimum_deposit: number
+          name: string
+        }
+        Insert: {
+          created_at?: string | null
+          daily_profit_percentage: number
+          description?: string | null
+          duration_days: number
+          id?: string
+          is_active?: boolean | null
+          minimum_deposit: number
+          name: string
+        }
+        Update: {
+          created_at?: string | null
+          daily_profit_percentage?: number
+          description?: string | null
+          duration_days?: number
+          id?: string
+          is_active?: boolean | null
+          minimum_deposit?: number
+          name?: string
+        }
+        Relationships: []
+      }
       portfolios: {
         Row: {
           amount: number
@@ -99,6 +132,8 @@ export type Database = {
           created_at: string | null
           id: string
           payment_method: string | null
+          plan_id: string | null
+          profit_amount: number | null
           status: string | null
           type: string
           updated_at: string | null
@@ -111,6 +146,8 @@ export type Database = {
           created_at?: string | null
           id?: string
           payment_method?: string | null
+          plan_id?: string | null
+          profit_amount?: number | null
           status?: string | null
           type: string
           updated_at?: string | null
@@ -123,6 +160,8 @@ export type Database = {
           created_at?: string | null
           id?: string
           payment_method?: string | null
+          plan_id?: string | null
+          profit_amount?: number | null
           status?: string | null
           type?: string
           updated_at?: string | null
@@ -131,7 +170,69 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "transactions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "investment_plans"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "transactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_profits: {
+        Row: {
+          created_at: string | null
+          daily_profit: number
+          id: string
+          is_paid: boolean | null
+          plan_id: string | null
+          profit_date: string
+          transaction_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_profit: number
+          id?: string
+          is_paid?: boolean | null
+          plan_id?: string | null
+          profit_date: string
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_profit?: number
+          id?: string
+          is_paid?: boolean | null
+          plan_id?: string | null
+          profit_date?: string
+          transaction_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_profits_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "investment_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_profits_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_profits_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -148,6 +249,7 @@ export type Database = {
           full_name: string | null
           id: string
           phone_number: string | null
+          plan_id: string | null
           updated_at: string | null
           username: string | null
         }
@@ -159,6 +261,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           phone_number?: string | null
+          plan_id?: string | null
           updated_at?: string | null
           username?: string | null
         }
@@ -170,17 +273,29 @@ export type Database = {
           full_name?: string | null
           id?: string
           phone_number?: string | null
+          plan_id?: string | null
           updated_at?: string | null
           username?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "investment_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_daily_profits: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
